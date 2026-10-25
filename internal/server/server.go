@@ -5,14 +5,22 @@ import (
 	"encoding/json"
 	"net/http"
 
+	"github.com/go-chi/chi/v5"
+	"github.com/go-chi/chi/v5/middleware"
+
 	"github.com/tuananh131001/apollo/internal/version"
 )
 
 // NewHandler returns the root HTTP handler.
 func NewHandler() http.Handler {
-	mux := http.NewServeMux()
-	mux.HandleFunc("GET /healthz", handleHealth)
-	return mux
+	r := chi.NewRouter()
+	r.Use(middleware.RequestID)
+	r.Use(middleware.RealIP)
+	r.Use(middleware.Logger)
+	r.Use(middleware.Recoverer)
+
+	r.Get("/healthz", handleHealth)
+	return r
 }
 
 func handleHealth(w http.ResponseWriter, _ *http.Request) {
