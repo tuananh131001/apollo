@@ -1,0 +1,47 @@
+---
+version: 2
+interactions:
+    - id: 0
+      request:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: 0
+        host: navidrome.test
+        remote_addr: 192.0.2.1:1234
+        request_uri: /rest/search3.view?albumCount=0&artistCount=0&c=apollo-test&f=json&p=REDACTED&query=apollo&u=REDACTED&v=1.16.1
+        headers:
+            User-Agent:
+                - ""
+            X-Forwarded-For:
+                - 192.0.2.1
+            X-Forwarded-Proto:
+                - http
+        url: http://navidrome.test/rest/search3.view?albumCount=0&artistCount=0&c=apollo-test&f=json&p=REDACTED&query=apollo&u=REDACTED&v=1.16.1
+        method: GET
+      response:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: -1
+        uncompressed: true
+        body: '{"subsonic-response":{"status":"ok","version":"1.16.1","type":"navidrome","serverVersion":"0.64.2 (10114574)","openSubsonic":true,"searchResult3":{"song":[{"id":"0KYxPkTB30KtBYlw9xLqha","parent":"7orkzq9nRdgry1xMEZTmRw","isDir":false,"title":"Apollo Moonwalk","album":"Dummy Album","artist":"Test Artist","track":2,"size":16612,"contentType":"audio/mpeg","suffix":"mp3","duration":2,"bitRate":65,"path":"Test Artist/Dummy Album/02 - Apollo Moonwalk.mp3","created":"2026-10-25T06:09:03.537732092Z","albumId":"7orkzq9nRdgry1xMEZTmRw","artistId":"4kqFOAfzcbEE22Bin8jHjV","type":"music","bpm":0,"comment":"","sortName":"apollo moonwalk","mediaType":"song","musicBrainzId":"","isrc":[],"genres":[],"replayGain":{},"channelCount":1,"samplingRate":44100,"bitDepth":0,"moods":[],"artists":[{"id":"4kqFOAfzcbEE22Bin8jHjV","name":"Test Artist"}],"displayArtist":"Test Artist","albumArtists":[{"id":"4kqFOAfzcbEE22Bin8jHjV","name":"Test Artist"}],"displayAlbumArtist":"Test Artist","contributors":[],"displayComposer":"","explicitStatus":"","groupings":[],"works":[],"movements":[]},{"id":"1MceE0Qs6h1BiRBkIVdmB2","parent":"7orkzq9nRdgry1xMEZTmRw","isDir":false,"title":"Apollo Sunrise","album":"Dummy Album","artist":"Test Artist","track":1,"size":16611,"contentType":"audio/mpeg","suffix":"mp3","duration":2,"bitRate":65,"path":"Test Artist/Dummy Album/01 - Apollo Sunrise.mp3","created":"2026-10-25T06:09:03.537286681Z","albumId":"7orkzq9nRdgry1xMEZTmRw","artistId":"4kqFOAfzcbEE22Bin8jHjV","type":"music","bpm":0,"comment":"","sortName":"apollo sunrise","mediaType":"song","musicBrainzId":"","isrc":[],"genres":[],"replayGain":{},"channelCount":1,"samplingRate":44100,"bitDepth":0,"moods":[],"artists":[{"id":"4kqFOAfzcbEE22Bin8jHjV","name":"Test Artist"}],"displayArtist":"Test Artist","albumArtists":[{"id":"4kqFOAfzcbEE22Bin8jHjV","name":"Test Artist"}],"displayAlbumArtist":"Test Artist","contributors":[],"displayComposer":"","explicitStatus":"","groupings":[],"works":[],"movements":[]}]}}}'
+        headers:
+            Content-Type:
+                - application/json
+            Date:
+                - Sun, 25 Oct 2026 06:09:24 GMT
+            Permissions-Policy:
+                - autoplay=(), camera=(), microphone=(), usb=()
+            Referrer-Policy:
+                - same-origin
+            Vary:
+                - Origin
+                - Accept-Encoding
+            X-Content-Type-Options:
+                - nosniff
+            X-Frame-Options:
+                - DENY
+        status: 200 OK
+        code: 200
+        duration: 28.287958ms

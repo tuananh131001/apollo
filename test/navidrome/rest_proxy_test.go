@@ -1,17 +1,17 @@
 package navidrome_test
 
 import (
-	"encoding/json"
 	"encoding/xml"
 	"net"
 	"net/http"
-	"net/http/httptest"
 	"net/url"
+	"slices"
 	"strings"
 	"testing"
 
 	"github.com/tuananh131001/apollo/internal/navidrome"
 	"github.com/tuananh131001/apollo/test/internal/vcr"
+	"github.com/tuananh131001/apollo/test/utils"
 )
 
 // Cassettes are recorded and replayed with the vcr package; see its docs for
@@ -35,9 +35,20 @@ type jsonEnvelope struct {
 }
 
 type jsonResponse struct {
-	Status  string        `json:"status"`
-	Version string        `json:"version"`
-	Error   subsonicError `json:"error"`
+	Status        string         `json:"status"`
+	Version       string         `json:"version"`
+	Error         subsonicError  `json:"error"`
+	SearchResult3 *searchResult3 `json:"searchResult3"`
+}
+
+type searchResult3 struct {
+	Song []song `json:"song"`
+}
+
+type song struct {
+	Title  string `json:"title"`
+	Artist string `json:"artist"`
+	Album  string `json:"album"`
 }
 
 type xmlResponse struct {
@@ -47,28 +58,51 @@ type xmlResponse struct {
 	Error   subsonicError `xml:"error"`
 }
 
-func TestRestProxyForwardsSuccess(t *testing.T) {
-	proxy, user, password := newRecordedProxy(t, "ping_ok")
+func TestRestProxyForwardsSearch(t *testing.T) {
+	proxy, user, password := newRecordedProxy(t, "search_songs")
 
-	rec := serve(proxy, "/rest/ping.view?"+subsonicQuery(user, password))
+	// The cassette was recorded against a Navidrome library of three dummy
+	// songs by "Test Artist" on "Dummy Album": "Apollo Sunrise",
+	// "Apollo Moonwalk" and "Gravity Well". The recorder only matches a
+	// request carrying the same query, so a replay also proves it was forwarded.
+	query := subsonicQuery(user, password) + "&" + url.Values{
+		"query":       {"apollo"},
+		"artistCount": {"0"},
+		"albumCount":  {"0"},
+	}.Encode()
+	rec := utils.Serve(proxy, "/rest/search3.view?"+query)
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want %d; body = %s", rec.Code, http.StatusOK, rec.Body)
 	}
-	if got := decodeJSON(t, rec).Status; got != "ok" {
-		t.Errorf("subsonic status = %q, want %q", got, "ok")
+	resp := utils.DecodeJSON[jsonEnvelope](t, rec).Response
+	if resp.Status != "ok" {
+		t.Fatalf("subsonic status = %q, want %q; error = %+v", resp.Status, "ok", resp.Error)
+	}
+	if resp.SearchResult3 == nil {
+		t.Fatalf("response has no searchResult3; body = %s", rec.Body)
+	}
+
+	got := resp.SearchResult3.Song
+	slices.SortFunc(got, func(a, b song) int { return strings.Compare(a.Title, b.Title) })
+	want := []song{
+		{Title: "Apollo Moonwalk", Artist: "Test Artist", Album: "Dummy Album"},
+		{Title: "Apollo Sunrise", Artist: "Test Artist", Album: "Dummy Album"},
+	}
+	if !slices.Equal(got, want) {
+		t.Errorf("songs = %+v, want %+v", got, want)
 	}
 }
 
 func TestRestProxyPassesNavidromeErrorsThrough(t *testing.T) {
 	proxy, user, _ := newRecordedProxy(t, "ping_wrong_password")
 
-	rec := serve(proxy, "/rest/ping.view?"+subsonicQuery(user, "wrong-password"))
+	rec := utils.Serve(proxy, "/rest/ping.view?"+subsonicQuery(user, "wrong-password"))
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want %d; body = %s", rec.Code, http.StatusOK, rec.Body)
 	}
-	resp := decodeJSON(t, rec)
+	resp := utils.DecodeJSON[jsonEnvelope](t, rec).Response
 	if resp.Status != "failed" {
 		t.Errorf("subsonic status = %q, want %q", resp.Status, "failed")
 	}
@@ -81,7 +115,7 @@ func TestRestProxyUnreachable(t *testing.T) {
 	proxy := navidrome.NewRestProxy(closedUpstream(t), nil)
 
 	t.Run("json", func(t *testing.T) {
-		rec := serve(proxy, "/rest/ping.view?f=json")
+		rec := utils.Serve(proxy, "/rest/ping.view?f=json")
 
 		if rec.Code != http.StatusBadGateway {
 			t.Fatalf("status = %d, want %d", rec.Code, http.StatusBadGateway)
@@ -89,7 +123,7 @@ func TestRestProxyUnreachable(t *testing.T) {
 		if got := rec.Header().Get("Content-Type"); got != "application/json" {
 			t.Errorf("Content-Type = %q, want application/json", got)
 		}
-		resp := decodeJSON(t, rec)
+		resp := utils.DecodeJSON[jsonEnvelope](t, rec).Response
 		want := jsonResponse{
 			Status:  "failed",
 			Version: subsonicVersion,
@@ -101,7 +135,7 @@ func TestRestProxyUnreachable(t *testing.T) {
 	})
 
 	t.Run("xml", func(t *testing.T) {
-		rec := serve(proxy, "/rest/ping.view")
+		rec := utils.Serve(proxy, "/rest/ping.view")
 
 		if rec.Code != http.StatusBadGateway {
 			t.Fatalf("status = %d, want %d", rec.Code, http.StatusBadGateway)
@@ -136,21 +170,6 @@ func subsonicQuery(user, password string) string {
 		"c": {"apollo-test"},
 		"f": {"json"},
 	}.Encode()
-}
-
-func serve(h http.Handler, target string) *httptest.ResponseRecorder {
-	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, target, nil))
-	return rec
-}
-
-func decodeJSON(t *testing.T, rec *httptest.ResponseRecorder) jsonResponse {
-	t.Helper()
-	var env jsonEnvelope
-	if err := json.NewDecoder(strings.NewReader(rec.Body.String())).Decode(&env); err != nil {
-		t.Fatalf("decode json: %v; body = %s", err, rec.Body)
-	}
-	return env.Response
 }
 
 // closedUpstream returns a URL for a local port that refuses connections.
