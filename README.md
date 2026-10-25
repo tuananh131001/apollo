@@ -8,6 +8,8 @@ Go 1.27.3 application.
 .
 ├── go.mod, go.sum        # module definition and dependency checksums
 ├── Makefile, .env.example
+├── Dockerfile            # multi-arch image (distroless, non-root)
+├── compose.yaml          # local stack: apollo built from source + Navidrome
 ├── cmd/                  # entry points, one folder per binary
 │   └── server/main.go    # HTTP service
 ├── internal/             # private application code (not importable by other modules)
@@ -39,3 +41,28 @@ The Navidrome proxy tests replay go-vcr cassettes from
 NAVIDROME_RECORD=1 APOLLO_NAVIDROME_URL=http://localhost:4533 \
 NAVIDROME_USER=admin NAVIDROME_PASSWORD=secret go test ./test/navidrome
 ```
+
+## Docker
+
+Local stack, with apollo built from source in front of a Navidrome container:
+
+```sh
+docker compose up --build   # apollo on :8080, Navidrome UI on :4533
+```
+
+Navidrome scans `./music` (or `NAVIDROME_MUSIC_DIR`); create its admin user at
+http://localhost:4533 on first run.
+
+## Releasing
+
+Pushing a semver tag runs `.github/workflows/release.yml`: it runs the tests,
+pushes a `linux/amd64` + `linux/arm64` image to
+`ghcr.io/tuananh131001/apollo`, and creates a GitHub release with generated
+notes.
+
+```sh
+git tag v1.2.3 && git push origin v1.2.3
+```
+
+`v1.2.3` is tagged `1.2.3`, `1.2`, `1` and `latest`; pre-releases such as
+`v1.3.0-rc.1` get only their exact version and a pre-release on GitHub.
