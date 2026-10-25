@@ -1,0 +1,46 @@
+name: Pi PR Review
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened, ready_for_review]
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
+concurrency:
+  group: pi-pr-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  review:
+    # Skip drafts and fork PRs (forks don't get secrets and shouldn't run with them)
+    if: github.event.pull_request.draft == false && github.event.pull_request.head.repo.fork == false
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+
+      - uses: shaftoe/pi-coding-agent-action@v2.30.1
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          provider: opencode-go
+          model: glm-5.3-flash
+          thinking_level: high
+          token: ${{ secrets.OPENCODE_API_KEY }}
+          update_comment: true
+          prompt: |
+            Review this pull request against main.
+            First call get_issue_or_pr_thread to read existing review comments and avoid repeating them.
+            Then call get_pr_diff to inspect the changes.
+            Focus on correctness bugs, security issues, and Go idioms/maintainability; skip nitpicks.
+            Post your findings with create_pull_request_review, using inline comments on the
+            relevant lines and a short summary. If there are no real issues, say so briefly.
