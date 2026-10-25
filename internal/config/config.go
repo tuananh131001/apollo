@@ -2,14 +2,11 @@
 package config
 
 import (
+	"errors"
+	"net/url"
 	"os"
 	"time"
 )
-
-type Config struct {
-	Addr            string
-	ShutdownTimeout time.Duration
-}
 
 // Load reads configuration from environment variables, falling back to defaults.
 func Load() (Config, error) {
@@ -24,7 +21,25 @@ func Load() (Config, error) {
 		}
 		cfg.ShutdownTimeout = d
 	}
+	u, err := loadNavidromeURL()
+	if err != nil {
+		return Config{}, err
+	}
+	cfg.NavidromeURL = u
 	return cfg, nil
+}
+
+// loadNavidromeURL reads the required APOLLO_NAVIDROME_URL, the Navidrome
+// server that /rest/* traffic is proxied to.
+func loadNavidromeURL() (*url.URL, error) {
+	u, err := url.Parse(os.Getenv("APOLLO_NAVIDROME_URL"))
+	if err != nil {
+		return nil, err
+	}
+	if u.Scheme == "" || u.Host == "" {
+		return nil, errors.New("APOLLO_NAVIDROME_URL must be an absolute URL, e.g. http://localhost:4533")
+	}
+	return u, nil
 }
 
 func getenv(key, fallback string) string {

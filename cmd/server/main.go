@@ -4,13 +4,17 @@ package main
 import (
 	"context"
 	"errors"
+	"io/fs"
 	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
 
+	"github.com/joho/godotenv"
+
 	"github.com/tuananh131001/apollo/internal/config"
+	"github.com/tuananh131001/apollo/internal/navidrome"
 	"github.com/tuananh131001/apollo/internal/server"
 )
 
@@ -22,6 +26,11 @@ func main() {
 }
 
 func run() error {
+	// Load local settings from .env when present; real environment variables win.
+	if err := godotenv.Load(); err != nil && !errors.Is(err, fs.ErrNotExist) {
+		return err
+	}
+
 	cfg, err := config.Load()
 	if err != nil {
 		return err
@@ -30,7 +39,7 @@ func run() error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	srv := &http.Server{Addr: cfg.Addr, Handler: server.NewHandler()}
+	srv := &http.Server{Addr: cfg.Addr, Handler: server.NewHandler(navidrome.NewRestProxy(cfg.NavidromeURL, nil))}
 
 	errCh := make(chan error, 1)
 	go func() {
