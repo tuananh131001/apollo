@@ -2,7 +2,6 @@ package navidrome
 
 import (
 	"encoding/xml"
-	"net/http"
 	"net/http/httputil"
 )
 
@@ -11,12 +10,6 @@ import (
 // including its own errors, is passed through as-is.
 type RestProxy struct {
 	proxy *httputil.ReverseProxy
-}
-
-// loggingTransport logs every request apollo sends to Navidrome once its
-// response headers arrive.
-type loggingTransport struct {
-	next http.RoundTripper
 }
 
 // Subsonic response envelopes used when apollo answers a /rest/* request itself.

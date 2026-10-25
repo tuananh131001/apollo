@@ -1,10 +1,8 @@
 package navidrome_test
 
 import (
-	"bytes"
 	"encoding/json"
 	"encoding/xml"
-	"log/slog"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -89,34 +87,6 @@ func TestRestProxyPassesNavidromeErrorsThrough(t *testing.T) {
 	}
 	if resp.Error.Code != 40 {
 		t.Errorf("subsonic error code = %d, want 40 (wrong credentials)", resp.Error.Code)
-	}
-}
-
-func TestRestProxyLogsRequests(t *testing.T) {
-	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusTeapot)
-	}))
-	t.Cleanup(upstream.Close)
-	u, _ := url.Parse(upstream.URL)
-	logs := captureLogs(t)
-
-	serve(navidrome.NewRestProxy(u, nil), "/rest/ping.view?u=alice&p=hunter2&f=json")
-
-	var entry struct {
-		Msg    string `json:"msg"`
-		Method string `json:"method"`
-		Path   string `json:"path"`
-		Status int    `json:"status"`
-	}
-	if err := json.Unmarshal(logs.Bytes(), &entry); err != nil {
-		t.Fatalf("decode log: %v; logs = %s", err, logs)
-	}
-	if entry.Msg != "navidrome request" || entry.Method != http.MethodGet ||
-		entry.Path != "/rest/ping.view" || entry.Status != http.StatusTeapot {
-		t.Errorf("log entry = %+v", entry)
-	}
-	if strings.Contains(logs.String(), "hunter2") || strings.Contains(logs.String(), "alice") {
-		t.Errorf("log leaks credentials: %s", logs)
 	}
 }
 
@@ -273,16 +243,6 @@ func decodeJSON(t *testing.T, rec *httptest.ResponseRecorder) jsonResponse {
 		t.Fatalf("decode json: %v; body = %s", err, rec.Body)
 	}
 	return env.Response
-}
-
-// captureLogs routes the default slog logger into a JSON buffer for the test.
-func captureLogs(t *testing.T) *bytes.Buffer {
-	t.Helper()
-	var buf bytes.Buffer
-	prev := slog.Default()
-	slog.SetDefault(slog.New(slog.NewJSONHandler(&buf, nil)))
-	t.Cleanup(func() { slog.SetDefault(prev) })
-	return &buf
 }
 
 // closedUpstream returns a URL for a local port that refuses connections.

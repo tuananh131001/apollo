@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
-	"time"
 
 	"github.com/go-chi/chi/v5/middleware"
 )
@@ -20,8 +19,7 @@ const subsonicVersion = "1.16.1"
 const unavailableMessage = "navidrome is unavailable"
 
 // NewRestProxy returns a RestProxy that forwards requests to upstream using
-// transport, or http.DefaultTransport when transport is nil. Every request
-// sent to Navidrome is logged.
+// transport, or http.DefaultTransport when transport is nil.
 func NewRestProxy(upstream *url.URL, transport http.RoundTripper) *RestProxy {
 	if transport == nil {
 		transport = http.DefaultTransport
@@ -31,7 +29,7 @@ func NewRestProxy(upstream *url.URL, transport http.RoundTripper) *RestProxy {
 			r.SetURL(upstream)
 			r.SetXForwarded()
 		},
-		Transport: loggingTransport{next: transport},
+		Transport: transport,
 		// Flush immediately so audio streams and downloads are not buffered.
 		FlushInterval: -1,
 		ErrorHandler:  writeUnavailable,
@@ -40,25 +38,6 @@ func NewRestProxy(upstream *url.URL, transport http.RoundTripper) *RestProxy {
 
 func (p *RestProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	p.proxy.ServeHTTP(w, r)
-}
-
-// RoundTrip sends req to Navidrome and logs the outcome. The query string is
-// never logged because Subsonic clients put credentials in it. Failed requests
-// are logged by writeUnavailable.
-func (t loggingTransport) RoundTrip(req *http.Request) (*http.Response, error) {
-	start := time.Now()
-	resp, err := t.next.RoundTrip(req)
-	if err != nil {
-		return nil, err
-	}
-	slog.Info("navidrome request",
-		"method", req.Method,
-		"path", req.URL.Path,
-		"status", resp.StatusCode,
-		"duration", time.Since(start),
-		"request_id", middleware.GetReqID(req.Context()),
-	)
-	return resp, nil
 }
 
 // writeUnavailable replies with a Subsonic "failed" envelope, in the format the
