@@ -39,7 +39,8 @@ func run() error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	srv := &http.Server{Addr: cfg.Addr, Handler: server.NewHandler(navidrome.NewRestProxy(cfg.NavidromeURL, nil))}
+	restProxy := navidrome.NewRestProxy(cfg.NavidromeURL, nil)
+	srv := &http.Server{Addr: cfg.Addr, Handler: server.NewHandler(restProxy)}
 
 	errCh := make(chan error, 1)
 	go func() {
