@@ -34,6 +34,7 @@ jobs:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           provider: opencode-go
           model: glm-5.3-flash
+          thinking_level: high
           token: ${{ secrets.OPENCODE_API_KEY }}
           update_comment: true
           prompt: |
