@@ -11,8 +11,9 @@ import (
 	"github.com/tuananh131001/apollo/internal/version"
 )
 
-// NewHandler returns the root HTTP handler.
-func NewHandler() http.Handler {
+// NewHandler returns the root HTTP handler. Subsonic API traffic under /rest/
+// is served by restProxy.
+func NewHandler(restProxy http.Handler) http.Handler {
 	r := chi.NewRouter()
 	r.Use(middleware.RequestID)
 	r.Use(middleware.RealIP)
@@ -20,6 +21,7 @@ func NewHandler() http.Handler {
 	r.Use(middleware.Recoverer)
 
 	r.Get("/healthz", handleHealth)
+	r.Handle("/rest/*", restProxy)
 	return r
 }
 
