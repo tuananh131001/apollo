@@ -1,0 +1,53 @@
+name: CI
+
+on:
+  pull_request:
+    # Default PR activity types; "opened" also fires for draft PRs.
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+
+      - uses: golangci/golangci-lint-action@v9
+        with:
+          version: v2.15
+
+  test:
+    name: Unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+
+      # Tests live in test/ as external packages, so -coverpkg is needed to
+      # attribute their coverage to the application code.
+      - name: Run tests with coverage
+        run: go test -race -covermode=atomic -coverpkg=./cmd/...,./internal/... -coverprofile=coverage.out ./...
+
+      - name: Generate HTML coverage report
+        run: |
+          go tool cover -html=coverage.out -o coverage.html
+          echo "### Coverage: $(go tool cover -func=coverage.out | awk '/^total:/ {print $NF}')" >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v7
+        with:
+          path: coverage.html
+          archive: false
