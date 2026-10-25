@@ -36,8 +36,8 @@ func loadNavidromeURL() (*url.URL, error) {
 	if err != nil {
 		return nil, err
 	}
-	if u.Scheme == "" || u.Host == "" {
-		return nil, errors.New("APOLLO_NAVIDROME_URL must be an absolute URL, e.g. http://localhost:4533")
+	if (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
+			return nil, errors.New("APOLLO_NAVIDROME_URL must be an absolute http(s) URL, e.g. http://localhost:4533")
 	}
 	return u, nil
 }
