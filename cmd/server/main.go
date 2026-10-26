@@ -14,6 +14,7 @@ import (
 	"github.com/joho/godotenv"
 
 	"github.com/tuananh131001/apollo/internal/config"
+	"github.com/tuananh131001/apollo/internal/lastfm"
 	"github.com/tuananh131001/apollo/internal/navidrome"
 	"github.com/tuananh131001/apollo/internal/server"
 )
@@ -36,10 +37,17 @@ func run() error {
 		return err
 	}
 
+	slog.SetLogLoggerLevel(cfg.LogLevel)
+
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	restProxy := navidrome.NewRestProxy(cfg.NavidromeURL, nil)
+	if cfg.LastFMAPIKey == "" {
+		slog.Warn("LASTFM_API_KEY is not set; /s searches will return no results")
+	}
+	tracks := lastfm.NewTrackService(cfg.LastFMAPIKey, lastfm.DefaultBaseURL, nil)
+	search := navidrome.NewInterceptSearchService(tracks, cfg.NavidromeURL, nil)
+	restProxy := navidrome.NewRestProxy(cfg.NavidromeURL, nil, search)
 	srv := &http.Server{Addr: cfg.Addr, Handler: server.NewHandler(restProxy)}
 
 	errCh := make(chan error, 1)

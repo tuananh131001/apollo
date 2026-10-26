@@ -112,7 +112,7 @@ func TestRestProxyPassesNavidromeErrorsThrough(t *testing.T) {
 }
 
 func TestRestProxyUnreachable(t *testing.T) {
-	proxy := navidrome.NewRestProxy(closedUpstream(t), nil)
+	proxy := navidrome.NewRestProxy(closedUpstream(t), nil, nil)
 
 	t.Run("json", func(t *testing.T) {
 		rec := utils.Serve(proxy, "/rest/ping.view?f=json")
@@ -159,7 +159,7 @@ func TestRestProxyUnreachable(t *testing.T) {
 func newRecordedProxy(t *testing.T, cassetteName string) (*navidrome.RestProxy, string, string) {
 	t.Helper()
 	s := vcr.Start(t, cassetteName)
-	return navidrome.NewRestProxy(s.Upstream, s.Transport), s.User, s.Password
+	return navidrome.NewRestProxy(s.Upstream, s.Transport, nil), s.User, s.Password
 }
 
 func subsonicQuery(user, password string) string {

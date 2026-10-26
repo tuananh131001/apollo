@@ -14,6 +14,7 @@ services:
       - "8080:8080"
     environment:
       APOLLO_NAVIDROME_URL: http://navidrome:4533
+      LASTFM_API_KEY: ${LASTFM_API_KEY:-}
     depends_on:
       - navidrome
 
