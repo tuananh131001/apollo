@@ -12,5 +12,7 @@ type Config struct {
 	NavidromeURL    *url.URL
 	// LastFMAPIKey authenticates "/s" searches against the Last.fm API.
 	LastFMAPIKey string
-	LogLevel     slog.Level
+	// YtDlpPath is the yt-dlp executable that plays Last.fm songs.
+	YtDlpPath string
+	LogLevel  slog.Level
 }

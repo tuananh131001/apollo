@@ -19,10 +19,9 @@ const subsonicVersion = "1.16.1"
 const unavailableMessage = "navidrome is unavailable"
 
 // NewRestProxy returns a RestProxy that forwards requests to upstream using
-// transport, or http.DefaultTransport when transport is nil. Searches that
-// search intercepts are answered without reaching upstream; a nil search
-// forwards everything.
-func NewRestProxy(upstream *url.URL, transport http.RoundTripper, search *InterceptSearchService) *RestProxy {
+// transport, or http.DefaultTransport when transport is nil. Requests one of
+// interceptors answers, tried in order, do not reach upstream.
+func NewRestProxy(upstream *url.URL, transport http.RoundTripper, interceptors ...Interceptor) *RestProxy {
 	if transport == nil {
 		transport = http.DefaultTransport
 	}
@@ -37,13 +36,15 @@ func NewRestProxy(upstream *url.URL, transport http.RoundTripper, search *Interc
 			FlushInterval: -1,
 			ErrorHandler:  writeUnavailable,
 		},
-		search: search,
+		interceptors: interceptors,
 	}
 }
 
 func (p *RestProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	if p.search != nil && p.search.Intercept(w, r) {
-		return
+	for _, i := range p.interceptors {
+		if i.Intercept(w, r) {
+			return
+		}
 	}
 	p.proxy.ServeHTTP(w, r)
 }

@@ -103,7 +103,7 @@ func TestInterceptAnswersSearchCommandFromLastFM(t *testing.T) {
 	if resp.Type != "navidrome" || resp.ServerVersion != ndServerVersion || !resp.OpenSubsonic {
 		t.Errorf("server details = (%q, %q, %v), want Navidrome's", resp.Type, resp.ServerVersion, resp.OpenSubsonic)
 	}
-	want := []lastfmSong{{ID: "https://www.last.fm/music/Justin+Bieber/_/Baby", Title: "Baby", Artist: "Justin Bieber"}}
+	want := []lastfmSong{{ID: navidrome.LastFMSongID("Justin Bieber", "Baby"), Title: "Baby", Artist: "Justin Bieber"}}
 	if !slices.Equal(resp.SearchResult3.Song, want) {
 		t.Errorf("songs = %+v, want %+v", resp.SearchResult3.Song, want)
 	}
@@ -219,7 +219,7 @@ func TestInterceptAnswersXML(t *testing.T) {
 	if err := xml.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("decode xml: %v; body = %s", err, rec.Body)
 	}
-	want := []lastfmSong{{ID: "u", Title: "Say", Artist: "Lena"}}
+	want := []lastfmSong{{ID: navidrome.LastFMSongID("Lena", "Say"), Title: "Say", Artist: "Lena"}}
 	if resp.Status != "ok" || resp.Type != "navidrome" || !slices.Equal(resp.Songs, want) {
 		t.Errorf("response = %+v, want ok from navidrome with %+v", resp, want)
 	}
@@ -271,7 +271,7 @@ func TestInterceptAnswersFormPost(t *testing.T) {
 		t.Errorf("Content-Type = %q, want application/json (f=json from the form)", got)
 	}
 	resp := utils.DecodeJSON[lastfmEnvelope](t, rec).Response
-	want := []lastfmSong{{ID: "u", Title: "Say", Artist: "Lena"}}
+	want := []lastfmSong{{ID: navidrome.LastFMSongID("Lena", "Say"), Title: "Say", Artist: "Lena"}}
 	if resp.Status != "ok" || resp.SearchResult3 == nil || !slices.Equal(resp.SearchResult3.Song, want) {
 		t.Errorf("response = %+v, want ok with %+v; body = %s", resp, want, rec.Body)
 	}

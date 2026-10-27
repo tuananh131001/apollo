@@ -4,26 +4,39 @@ import (
 	"encoding/xml"
 	"net/http"
 	"net/http/httputil"
-	"net/url"
 
 	"github.com/tuananh131001/apollo/internal/lastfm"
+	"github.com/tuananh131001/apollo/internal/youtube"
 )
 
-// RestProxy forwards /rest/* requests to Navidrome unchanged, except searches
-// its InterceptSearchService answers itself. It also answers when Navidrome
-// cannot be reached; every response Navidrome sends, including its own errors,
-// is passed through as-is.
+// RestProxy forwards /rest/* requests to Navidrome unchanged, except those its
+// Interceptors answer themselves. It also answers when Navidrome cannot be
+// reached; every response Navidrome sends, including its own errors, is passed
+// through as-is.
 type RestProxy struct {
-	proxy  *httputil.ReverseProxy
-	search *InterceptSearchService
+	proxy        *httputil.ReverseProxy
+	interceptors []Interceptor
+}
+
+// Interceptor answers some /rest/* requests instead of Navidrome. Intercept
+// writes a response and returns true for a request it answers; otherwise it
+// writes nothing and returns false, so the request can be forwarded.
+type Interceptor interface {
+	Intercept(w http.ResponseWriter, r *http.Request) bool
 }
 
 // InterceptSearchService answers Subsonic searches written as "/s" commands
 // with Last.fm results instead of Navidrome's library.
 type InterceptSearchService struct {
-	tracks   *lastfm.TrackService
-	upstream *url.URL
-	client   *http.Client
+	tracks *lastfm.TrackService
+	auth   authenticator
+}
+
+// InterceptStreamService plays Last.fm songs, found by LastFMSongID ids, from
+// YouTube Music instead of Navidrome's library.
+type InterceptStreamService struct {
+	audio *youtube.AudioService
+	auth  authenticator
 }
 
 // Subsonic response envelope used when apollo answers a /rest/* request itself.

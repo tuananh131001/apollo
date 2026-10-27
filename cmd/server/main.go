@@ -17,6 +17,7 @@ import (
 	"github.com/tuananh131001/apollo/internal/lastfm"
 	"github.com/tuananh131001/apollo/internal/navidrome"
 	"github.com/tuananh131001/apollo/internal/server"
+	"github.com/tuananh131001/apollo/internal/youtube"
 )
 
 func main() {
@@ -47,7 +48,8 @@ func run() error {
 	}
 	tracks := lastfm.NewTrackService(cfg.LastFMAPIKey, lastfm.DefaultBaseURL, nil)
 	search := navidrome.NewInterceptSearchService(tracks, cfg.NavidromeURL, nil)
-	restProxy := navidrome.NewRestProxy(cfg.NavidromeURL, nil, search)
+	stream := navidrome.NewInterceptStreamService(youtube.NewAudioService(cfg.YtDlpPath), cfg.NavidromeURL, nil)
+	restProxy := navidrome.NewRestProxy(cfg.NavidromeURL, nil, search, stream)
 	srv := &http.Server{Addr: cfg.Addr, Handler: server.NewHandler(restProxy)}
 
 	errCh := make(chan error, 1)

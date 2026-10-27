@@ -2,9 +2,6 @@ package navidrome
 
 import (
 	"bytes"
-	"encoding/json"
-	"errors"
-	"fmt"
 	"io"
 	"mime"
 	"net/http"
@@ -12,7 +9,6 @@ import (
 	"path"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/tuananh131001/apollo/internal/lastfm"
 )
@@ -31,25 +27,14 @@ const defaultSongCount = 20
 // searches and are forwarded without being inspected.
 const maxFormSize = 64 << 10
 
-// authTimeout bounds the credential check sent to Navidrome.
-const authTimeout = 10 * time.Second
-
-// authParams are the Subsonic query parameters that identify and authenticate
-// a client. Only these are sent to Navidrome to check a search command.
-var authParams = []string{"u", "p", "t", "s", "apiKey", "v", "c"}
-
 // NewInterceptSearchService returns an InterceptSearchService that looks "/s"
 // searches up with tracks, after Navidrome at upstream has accepted the
 // client's credentials. Navidrome is reached through transport, or
 // http.DefaultTransport when transport is nil.
 func NewInterceptSearchService(tracks *lastfm.TrackService, upstream *url.URL, transport http.RoundTripper) *InterceptSearchService {
-	if transport == nil {
-		transport = http.DefaultTransport
-	}
 	return &InterceptSearchService{
-		tracks:   tracks,
-		upstream: upstream,
-		client:   &http.Client{Transport: transport, Timeout: authTimeout},
+		tracks: tracks,
+		auth:   newAuthenticator(upstream, transport),
 	}
 }
 
@@ -84,7 +69,7 @@ func (s *InterceptSearchService) Intercept(w http.ResponseWriter, r *http.Reques
 
 	// Authenticate like Navidrome would, so a search command fails, and
 	// succeeds, with the same envelope as a library search.
-	nd, err := s.authenticate(r)
+	nd, err := s.auth.authenticate(r)
 	if err != nil {
 		writeUnavailable(w, r, err)
 		return true
@@ -106,44 +91,6 @@ func (s *InterceptSearchService) Intercept(w http.ResponseWriter, r *http.Reques
 	nd.SearchResult3 = result
 	writeResponse(w, r, http.StatusOK, nd)
 	return true
-}
-
-// authenticate sends r's credentials to Navidrome's ping endpoint and returns
-// its reply: status "ok" with Navidrome's server details, or "failed" with the
-// error Navidrome gives for those credentials.
-func (s *InterceptSearchService) authenticate(r *http.Request) (subsonicResponse, error) {
-	in := r.URL.Query()
-	q := url.Values{"f": {"json"}}
-	for _, k := range authParams {
-		if v, ok := in[k]; ok {
-			q[k] = v
-		}
-	}
-	u := s.upstream.JoinPath("rest", "ping.view")
-	u.RawQuery = q.Encode()
-
-	req, err := http.NewRequestWithContext(r.Context(), http.MethodGet, u.String(), nil)
-	if err != nil {
-		return subsonicResponse{}, err
-	}
-	resp, err := s.client.Do(req)
-	if err != nil {
-		// The *url.Error wrapper quotes the request URL, which holds credentials.
-		if ue, ok := errors.AsType[*url.Error](err); ok {
-			return subsonicResponse{}, ue.Err
-		}
-		return subsonicResponse{}, err
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	var body jsonEnvelope
-	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
-		return subsonicResponse{}, fmt.Errorf("decode navidrome ping (HTTP %d): %w", resp.StatusCode, err)
-	}
-	if body.Response.Status == "" {
-		return subsonicResponse{}, fmt.Errorf("navidrome ping returned no status (HTTP %d)", resp.StatusCode)
-	}
-	return body.Response, nil
 }
 
 // requestParams returns r's Subsonic parameters: the query string plus, for a
@@ -199,8 +146,7 @@ func songPage(q url.Values) (limit int, ok bool) {
 // sent because clients such as Feishin fail on songs without them.
 func newLastFMSong(t lastfm.Track) song {
 	return song{
-		// Last.fm tracks have no Navidrome id; their page URL is unique.
-		ID:         t.URL,
+		ID:         LastFMSongID(t.Artist, t.Name),
 		Title:      t.Name,
 		Artist:     t.Artist,
 		Type:       "music",

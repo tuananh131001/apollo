@@ -14,6 +14,7 @@ func Load() (Config, error) {
 		Addr:            getenv("APOLLO_ADDR", ":8080"),
 		ShutdownTimeout: 10 * time.Second,
 		LastFMAPIKey:    os.Getenv("LASTFM_API_KEY"),
+		YtDlpPath:       getenv("APOLLO_YTDLP_PATH", "yt-dlp"),
 	}
 	if v := os.Getenv("APOLLO_SHUTDOWN_TIMEOUT"); v != "" {
 		d, err := time.ParseDuration(v)
