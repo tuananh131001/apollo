@@ -14,6 +14,7 @@ Go 1.27.3 application.
 │   └── server/main.go    # HTTP service
 ├── internal/             # private application code (not importable by other modules)
 │   ├── config/           # env-based configuration
+│   ├── lastfm/           # Last.fm API client (track search)
 │   ├── navidrome/        # reverse proxy for Navidrome's Subsonic API (/rest/*)
 │   ├── server/           # HTTP handlers and routing (go-chi/chi v5)
 │   └── version/          # build metadata
@@ -33,6 +34,13 @@ On startup the server also loads `.env` from the working directory when present
 (via [godotenv](https://github.com/joho/godotenv)); variables already set in the
 environment take precedence.
 `APOLLO_NAVIDROME_URL` is required: all `/rest/*` requests are proxied to it.
+
+`LASTFM_API_KEY` enables Last.fm search. A `search3` query starting with `/s`
+is answered from Last.fm's `track.search` instead of Navidrome; add `@ <artist>`
+to narrow it, e.g. `/s Baby @ Justin Bieber`. The client's credentials are
+checked against Navidrome first (via `ping`), so a search command needs the
+same authentication as a library search and fails with Navidrome's error.
+Last.fm failures are logged and the client gets an empty result.
 
 The Navidrome proxy tests replay go-vcr cassettes from
 `test/navidrome/testdata/cassettes`. To re-record them against a real server:
