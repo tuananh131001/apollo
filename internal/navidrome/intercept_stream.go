@@ -16,9 +16,14 @@ import (
 	"github.com/tuananh131001/apollo/internal/youtube"
 )
 
-// errNotFound is Subsonic's "requested data was not found" error, sent when a
-// Last.fm song cannot be played.
-var errNotFound = subsonicError{Code: 70, Message: "song not found"}
+// Subsonic error codes sent when a Last.fm song cannot be played.
+const (
+	errorCodeGeneric  = 0
+	errorCodeNotFound = 70
+)
+
+// errMalformedSongID is reported when a lastfm- id does not decode.
+var errMalformedSongID = errors.New("malformed last.fm song id")
 
 // streamEndpoints are the Subsonic endpoints that send a song's audio.
 var streamEndpoints = []string{"stream", "stream.view", "download", "download.view"}
@@ -66,12 +71,20 @@ func (s *InterceptStreamService) Intercept(w http.ResponseWriter, r *http.Reques
 
 	artist, title, ok := ParseLastFMSongID(id)
 	if !ok {
-		writeSongNotFound(w, r, nd, id, errors.New("malformed last.fm song id"))
+		writeSongError(w, r, nd, id, errMalformedSongID)
+		return true
+	}
+	// The audio is piped as yt-dlp sends it, so it cannot be fetched by range.
+	w.Header().Set("Accept-Ranges", "none")
+	if r.Method == http.MethodHead {
+		// Answer a probe without downloading the song.
+		w.Header().Set("Content-Type", youtube.ContentType)
+		w.WriteHeader(http.StatusOK)
 		return true
 	}
 	audio, err := s.audio.Fetch(r.Context(), artist, title)
 	if err != nil {
-		writeSongNotFound(w, r, nd, id, err)
+		writeSongError(w, r, nd, id, err)
 		return true
 	}
 	defer func() { _ = audio.Close() }()
@@ -81,29 +94,37 @@ func (s *InterceptStreamService) Intercept(w http.ResponseWriter, r *http.Reques
 	w.Header().Set("Content-Type", youtube.ContentType)
 	w.WriteHeader(http.StatusOK)
 	if err := copyFlushing(w, audio); err != nil && r.Context().Err() == nil {
-		logSongError(r, id, "last.fm song stream failed", err)
+		slog.Error("last.fm song stream failed", songLogAttrs(r, id, err)...)
 	}
 	return true
 }
 
-// writeSongNotFound answers with error 70 in nd's envelope and logs why the
-// song could not be played, unless the client has already gone.
-func writeSongNotFound(w http.ResponseWriter, r *http.Request, nd subsonicResponse, id string, err error) {
+// writeSongError answers with a Subsonic error in nd's envelope and logs why
+// the song could not be played, unless the client has already gone. A song
+// YouTube Music does not have is error 70 and a warning; anything else is a
+// failure apollo's operator should look at.
+func writeSongError(w http.ResponseWriter, r *http.Request, nd subsonicResponse, id string, err error) {
 	if errors.Is(err, context.Canceled) && r.Context().Err() != nil {
 		return
 	}
-	logSongError(r, id, "last.fm song not playable", err)
 	nd.Status = "failed"
-	nd.Error = &subsonicError{Code: errNotFound.Code, Message: errNotFound.Message}
+	if errors.Is(err, youtube.ErrNotFound) || errors.Is(err, errMalformedSongID) {
+		slog.Warn("last.fm song not found", songLogAttrs(r, id, err)...)
+		nd.Error = &subsonicError{Code: errorCodeNotFound, Message: "song not found"}
+	} else {
+		slog.Error("last.fm song unavailable", songLogAttrs(r, id, err)...)
+		nd.Error = &subsonicError{Code: errorCodeGeneric, Message: "song unavailable"}
+	}
 	writeResponse(w, r, http.StatusOK, nd)
 }
 
-func logSongError(r *http.Request, id, msg string, err error) {
-	slog.Warn(msg,
+// songLogAttrs are the log attributes for a failure to play song id.
+func songLogAttrs(r *http.Request, id string, err error) []any {
+	return []any{
 		"id", id,
 		"err", err,
 		"request_id", middleware.GetReqID(r.Context()),
-	)
+	}
 }
 
 // copyFlushing copies src to w, flushing after every write so the client

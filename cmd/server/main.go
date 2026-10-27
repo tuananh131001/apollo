@@ -48,7 +48,11 @@ func run() error {
 	}
 	tracks := lastfm.NewTrackService(cfg.LastFMAPIKey, lastfm.DefaultBaseURL, nil)
 	search := navidrome.NewInterceptSearchService(tracks, cfg.NavidromeURL, nil)
-	stream := navidrome.NewInterceptStreamService(youtube.NewAudioService(cfg.YtDlpPath), cfg.NavidromeURL, nil)
+	audio := youtube.NewAudioService(cfg.YtDlpPath, cfg.YtDlpMaxConcurrent)
+	if err := audio.Check(); err != nil {
+		slog.Warn("yt-dlp not found; Last.fm songs will not play", "path", cfg.YtDlpPath, "err", err)
+	}
+	stream := navidrome.NewInterceptStreamService(audio, cfg.NavidromeURL, nil)
 	restProxy := navidrome.NewRestProxy(cfg.NavidromeURL, nil, search, stream)
 	srv := &http.Server{Addr: cfg.Addr, Handler: server.NewHandler(restProxy)}
 

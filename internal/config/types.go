@@ -14,5 +14,7 @@ type Config struct {
 	LastFMAPIKey string
 	// YtDlpPath is the yt-dlp executable that plays Last.fm songs.
 	YtDlpPath string
-	LogLevel  slog.Level
+	// YtDlpMaxConcurrent caps how many Last.fm songs stream at once.
+	YtDlpMaxConcurrent int
+	LogLevel           slog.Level
 }

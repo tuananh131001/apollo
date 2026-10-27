@@ -214,7 +214,7 @@ func startLiveApollo(t *testing.T) liveApollo {
 
 	proxy := navidrome.NewRestProxy(nd, nil,
 		navidrome.NewInterceptSearchService(tracks, nd, nil),
-		navidrome.NewInterceptStreamService(youtube.NewAudioService(ytdlp), nd, nil),
+		navidrome.NewInterceptStreamService(youtube.NewAudioService(ytdlp, 4), nd, nil),
 	)
 	srv := httptest.NewServer(server.NewHandler(proxy))
 	t.Cleanup(srv.Close)

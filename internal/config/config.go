@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/url"
 	"os"
+	"strconv"
 	"time"
 )
 
@@ -16,6 +17,11 @@ func Load() (Config, error) {
 		LastFMAPIKey:    os.Getenv("LASTFM_API_KEY"),
 		YtDlpPath:       getenv("APOLLO_YTDLP_PATH", "yt-dlp"),
 	}
+	n, err := strconv.Atoi(getenv("APOLLO_YTDLP_MAX_CONCURRENT", "4"))
+	if err != nil || n < 1 {
+		return Config{}, errors.New("APOLLO_YTDLP_MAX_CONCURRENT must be a positive integer")
+	}
+	cfg.YtDlpMaxConcurrent = n
 	if v := os.Getenv("APOLLO_SHUTDOWN_TIMEOUT"); v != "" {
 		d, err := time.ParseDuration(v)
 		if err != nil {

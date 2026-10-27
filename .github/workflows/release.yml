@@ -58,6 +58,14 @@ jobs:
             type=semver,pattern={{major}}.{{minor}}
             type=semver,pattern={{major}}
 
+      # The image is useless if yt-dlp or deno cannot run in it, so try both
+      # on the runner's platform before pushing anything.
+      - name: Smoke test yt-dlp and deno
+        run: |
+          docker buildx build --load --tag apollo:smoke .
+          docker run --rm --entrypoint /usr/local/bin/yt-dlp apollo:smoke --version
+          docker run --rm --entrypoint /usr/local/bin/deno apollo:smoke --version
+
       - uses: docker/build-push-action@v7
         with:
           context: .

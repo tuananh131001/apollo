@@ -10,7 +10,6 @@ import (
 	"net/url"
 	"os/exec"
 	"strings"
-	"sync"
 	"time"
 )
 
@@ -30,24 +29,39 @@ const headSize = 32 << 10
 // maxStderr caps how much of yt-dlp's stderr is kept for error messages.
 const maxStderr = 2 << 10
 
-// ErrNotFound is returned when YouTube Music has no song for a query.
-var ErrNotFound = errors.New("youtube music has no matching song")
-
-// AudioService downloads songs from YouTube Music by running yt-dlp.
-type AudioService struct {
-	ytdlp string
-}
+var (
+	// ErrNotFound is returned when YouTube Music has no song for a query.
+	ErrNotFound = errors.New("youtube music has no matching song")
+	// ErrBusy is returned when the most yt-dlp downloads allowed are running.
+	ErrBusy = errors.New("too many songs streaming from youtube music")
+)
 
 // NewAudioService returns an AudioService that runs the yt-dlp executable at
-// ytdlpPath, which is looked up in PATH when it has no slash.
-func NewAudioService(ytdlpPath string) *AudioService {
-	return &AudioService{ytdlp: ytdlpPath}
+// ytdlpPath, which is looked up in PATH when it has no slash, with at most
+// maxConcurrent downloads running at once.
+func NewAudioService(ytdlpPath string, maxConcurrent int) *AudioService {
+	return &AudioService{ytdlp: ytdlpPath, slots: make(chan struct{}, max(maxConcurrent, 1))}
+}
+
+// Check reports an error when the yt-dlp executable cannot be found.
+func (s *AudioService) Check() error {
+	_, err := exec.LookPath(s.ytdlp)
+	return err
 }
 
 // Fetch searches YouTube Music for artist and title and returns the first
 // song's audio as yt-dlp downloads it, once the first bytes have arrived. The
-// download stops when ctx is cancelled or the audio is closed.
+// download stops when ctx is cancelled or the audio is closed. It returns
+// ErrNotFound when there is no such song and ErrBusy when no download slot is
+// free.
 func (s *AudioService) Fetch(ctx context.Context, artist, title string) (io.ReadCloser, error) {
+	select {
+	case s.slots <- struct{}{}:
+	default:
+		return nil, ErrBusy
+	}
+	release := func() { <-s.slots }
+
 	runCtx, cancel := context.WithCancel(ctx)
 	cmd := exec.CommandContext(runCtx, s.ytdlp,
 		"--format", audioFormat,
@@ -62,24 +76,28 @@ func (s *AudioService) Fetch(ctx context.Context, artist, title string) (io.Read
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
 		cancel()
+		release()
 		return nil, err
 	}
 	if err := cmd.Start(); err != nil {
 		cancel()
+		release()
 		return nil, fmt.Errorf("start yt-dlp: %w", err)
 	}
-	a := &audio{cmd: cmd, stdout: stdout, stderr: stderr, cancel: cancel}
+	a := &audio{cmd: cmd, stdout: stdout, stderr: stderr, cancel: cancel, release: release}
 
 	timer := time.AfterFunc(firstByteTimeout, cancel)
 	head := make([]byte, headSize)
 	n, err := io.ReadAtLeast(stdout, head, 1)
-	timedOut := !timer.Stop()
+	if !timer.Stop() {
+		// yt-dlp is being killed, even if some audio arrived meanwhile.
+		_ = a.Close()
+		return nil, fmt.Errorf("yt-dlp sent no audio within %s; stderr: %s", firstByteTimeout, stderr)
+	}
 	if n == 0 {
 		// yt-dlp closed its output, so it is exiting, or it has been killed.
 		werr := a.wait()
 		switch {
-		case timedOut:
-			return nil, fmt.Errorf("yt-dlp sent no audio within %s; stderr: %s", firstByteTimeout, stderr)
 		case ctx.Err() != nil:
 			return nil, ctx.Err()
 		case werr != nil:
@@ -103,19 +121,6 @@ func searchURL(artist, title string) string {
 	return u.String()
 }
 
-// audio is a running yt-dlp download. Reading past the end reports yt-dlp's
-// failure, if it failed; Close kills yt-dlp if it is still running.
-type audio struct {
-	cmd    *exec.Cmd
-	stdout io.Reader
-	stderr *tailBuffer
-	cancel context.CancelFunc
-	r      io.Reader
-
-	once sync.Once
-	err  error
-}
-
 func (a *audio) Read(p []byte) (int, error) {
 	n, err := a.r.Read(p)
 	if err == io.EOF {
@@ -132,19 +137,14 @@ func (a *audio) Close() error {
 	return nil
 }
 
+// wait waits for yt-dlp to exit, once, and frees its download slot.
 func (a *audio) wait() error {
 	a.once.Do(func() {
 		a.err = a.cmd.Wait()
 		a.cancel()
+		a.release()
 	})
 	return a.err
-}
-
-// tailBuffer keeps the last max bytes written to it.
-type tailBuffer struct {
-	mu  sync.Mutex
-	max int
-	buf []byte
 }
 
 func (b *tailBuffer) Write(p []byte) (int, error) {

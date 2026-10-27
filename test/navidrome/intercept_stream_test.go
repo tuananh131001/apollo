@@ -4,9 +4,11 @@ import (
 	"encoding/xml"
 	"maps"
 	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/tuananh131001/apollo/internal/navidrome"
@@ -101,24 +103,118 @@ func TestInterceptStreamErrorFormat(t *testing.T) {
 	})
 }
 
-// recordingYtDlp is a stand-in yt-dlp that only records that it was run.
-type recordingYtDlp struct {
+func TestInterceptStreamSendsAudio(t *testing.T) {
+	nd := newFakeNavidrome(t)
+	proxy := newStreamingProxy(nd.URL, newFakeYtDlp(t, ytDlpAudio).Path)
+
+	rec := utils.Serve(proxy, "/rest/stream.view?"+streamQuery(ndUser, ndPassword, navidrome.LastFMSongID("Lena", "Say")))
+
+	if rec.Code != http.StatusOK || rec.Body.String() != "fake-m4a-audio" {
+		t.Fatalf("response = %d %q, want 200 with the audio", rec.Code, rec.Body)
+	}
+	if got := rec.Header().Get("Content-Type"); got != "audio/mp4" {
+		t.Errorf("Content-Type = %q, want audio/mp4", got)
+	}
+	// The audio is piped as yt-dlp sends it, so clients must not seek by range.
+	if got := rec.Header().Get("Accept-Ranges"); got != "none" {
+		t.Errorf("Accept-Ranges = %q, want none", got)
+	}
+}
+
+func TestInterceptStreamAnswersHeadWithoutRunningYtDlp(t *testing.T) {
+	nd := newFakeNavidrome(t)
+	ytdlp := newFakeYtDlp(t, ytDlpAudio)
+	proxy := newStreamingProxy(nd.URL, ytdlp.Path)
+	target := "/rest/stream.view?" + streamQuery(ndUser, ndPassword, navidrome.LastFMSongID("Lena", "Say"))
+
+	rec := httptest.NewRecorder()
+	proxy.ServeHTTP(rec, httptest.NewRequest(http.MethodHead, target, nil))
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d; body = %s", rec.Code, http.StatusOK, rec.Body)
+	}
+	if got := rec.Header().Get("Content-Type"); got != "audio/mp4" {
+		t.Errorf("Content-Type = %q, want audio/mp4", got)
+	}
+	if got := rec.Header().Get("Accept-Ranges"); got != "none" {
+		t.Errorf("Accept-Ranges = %q, want none", got)
+	}
+	if ytdlp.Ran() {
+		t.Error("yt-dlp ran for a HEAD request")
+	}
+	if pings := nd.Pings(); len(pings) != 1 {
+		t.Errorf("navidrome pings = %d, want 1 (HEAD is still authenticated)", len(pings))
+	}
+}
+
+func TestInterceptStreamReportsNoMatchAsNotFound(t *testing.T) {
+	nd := newFakeNavidrome(t)
+	logs := captureLogs(t)
+	proxy := newStreamingProxy(nd.URL, newFakeYtDlp(t, ytDlpNoMatch).Path)
+
+	rec := utils.Serve(proxy, "/rest/stream.view?"+streamQuery(ndUser, ndPassword, navidrome.LastFMSongID("Lena", "Say")))
+
+	resp := utils.DecodeJSON[jsonEnvelope](t, rec).Response
+	if resp.Status != "failed" || resp.Error.Code != 70 {
+		t.Errorf("response = %+v, want failed with code 70", resp)
+	}
+	if out := logs.String(); !strings.Contains(out, "level=WARN") || strings.Contains(out, "level=ERROR") {
+		t.Errorf("logs = %q, want a warning only", out)
+	}
+}
+
+func TestInterceptStreamReportsYtDlpFailureAsError(t *testing.T) {
+	nd := newFakeNavidrome(t)
+	logs := captureLogs(t)
+	proxy := newStreamingProxy(nd.URL, newFakeYtDlp(t, ytDlpFails).Path)
+
+	rec := utils.Serve(proxy, "/rest/stream.view?"+streamQuery(ndUser, ndPassword, navidrome.LastFMSongID("Lena", "Say")))
+
+	resp := utils.DecodeJSON[jsonEnvelope](t, rec).Response
+	if resp.Status != "failed" || resp.Error.Code != 0 {
+		t.Errorf("response = %+v, want failed with code 0", resp)
+	}
+	out := logs.String()
+	if !strings.Contains(out, "level=ERROR") || !strings.Contains(out, "403") {
+		t.Errorf("logs = %q, want an error with yt-dlp's stderr", out)
+	}
+}
+
+// fakeYtDlp is a stand-in yt-dlp that records that it was run, then runs a
+// shell script body.
+type fakeYtDlp struct {
 	Path   string
 	marker string
 }
 
-func newRecordingYtDlp(t *testing.T) recordingYtDlp {
+// Bodies for newFakeYtDlp.
+const (
+	// ytDlpAudio prints a little audio and exits, like a short song.
+	ytDlpAudio = "printf 'fake-m4a-audio'"
+	// ytDlpNoMatch prints nothing and succeeds, as yt-dlp does when YouTube
+	// Music finds no song.
+	ytDlpNoMatch = ""
+	// ytDlpFails fails before sending audio, as when YouTube blocks a download.
+	ytDlpFails = "echo 'ERROR: HTTP Error 403: Forbidden' >&2; exit 1"
+)
+
+func newFakeYtDlp(t *testing.T, body string) fakeYtDlp {
 	t.Helper()
 	dir := t.TempDir()
-	y := recordingYtDlp{Path: filepath.Join(dir, "yt-dlp"), marker: filepath.Join(dir, "ran")}
-	script := "#!/bin/sh\ntouch '" + y.marker + "'\n"
+	y := fakeYtDlp{Path: filepath.Join(dir, "yt-dlp"), marker: filepath.Join(dir, "ran")}
+	script := "#!/bin/sh\ntouch '" + y.marker + "'\n" + body + "\n"
 	if err := os.WriteFile(y.Path, []byte(script), 0o755); err != nil {
 		t.Fatalf("write fake yt-dlp: %v", err)
 	}
 	return y
 }
 
-func (y recordingYtDlp) Ran() bool {
+func newRecordingYtDlp(t *testing.T) fakeYtDlp {
+	t.Helper()
+	return newFakeYtDlp(t, ytDlpNoMatch)
+}
+
+func (y fakeYtDlp) Ran() bool {
 	_, err := os.Stat(y.marker)
 	return err == nil
 }
@@ -126,7 +222,7 @@ func (y recordingYtDlp) Ran() bool {
 // newStreamingProxy returns a RestProxy in front of the Navidrome at upstream
 // that plays Last.fm songs with the yt-dlp at ytdlpPath.
 func newStreamingProxy(upstream *url.URL, ytdlpPath string) *navidrome.RestProxy {
-	stream := navidrome.NewInterceptStreamService(youtube.NewAudioService(ytdlpPath), upstream, nil)
+	stream := navidrome.NewInterceptStreamService(youtube.NewAudioService(ytdlpPath, 4), upstream, nil)
 	return navidrome.NewRestProxy(upstream, nil, stream)
 }
 
