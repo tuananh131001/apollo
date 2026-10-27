@@ -82,6 +82,11 @@ func (s *InterceptStreamService) Intercept(w http.ResponseWriter, r *http.Reques
 		w.WriteHeader(http.StatusOK)
 		return true
 	}
+	slog.Info("downloading last.fm song with yt-dlp",
+		"artist", artist,
+		"title", title,
+		"request_id", middleware.GetReqID(r.Context()),
+	)
 	audio, err := s.audio.Fetch(r.Context(), artist, title)
 	if err != nil {
 		writeSongError(w, r, nd, id, err)
