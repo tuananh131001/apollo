@@ -480,7 +480,7 @@ func newCoveringProxy(t *testing.T, upstream *url.URL, lastfmHandler, deezerHand
 		t.Fatalf("parse url: %v", err)
 	}
 	tracks := lastfm.NewTrackService("test-api-key", base, nil)
-	search := navidrome.NewInterceptSearchService(tracks, newFakeDeezer(t, deezerHandler), upstream, nil)
+	search := navidrome.NewInterceptSearchService(tracks, utils.NewDeezer(t, deezerHandler), upstream, nil)
 	return navidrome.NewRestProxy(upstream, nil, search)
 }
 

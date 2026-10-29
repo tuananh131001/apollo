@@ -187,6 +187,6 @@ func TestInterceptSongForwardsOtherRequests(t *testing.T) {
 // running deezerHandler.
 func newSongProxy(t *testing.T, upstream *url.URL, deezerHandler http.HandlerFunc) *navidrome.RestProxy {
 	t.Helper()
-	song := navidrome.NewInterceptSongService(newFakeDeezer(t, deezerHandler), upstream, nil)
+	song := navidrome.NewInterceptSongService(utils.NewDeezer(t, deezerHandler), upstream, nil)
 	return navidrome.NewRestProxy(upstream, nil, song)
 }

@@ -5,7 +5,6 @@ import (
 	"errors"
 	"io"
 	"net/http"
-	"net/http/httptest"
 	"net/url"
 	"os"
 	"testing"
@@ -13,14 +12,13 @@ import (
 	"time"
 
 	"github.com/tuananh131001/apollo/internal/deezer"
+	"github.com/tuananh131001/apollo/test/utils"
 )
-
-const sayCover = "911a6e5e5e5d64dff4e73094beae7783"
 
 func TestFindCoverSendsQuery(t *testing.T) {
 	var got url.Values
 	var path string
-	svc := newService(t, func(w http.ResponseWriter, r *http.Request) {
+	svc := utils.NewDeezer(t, func(w http.ResponseWriter, r *http.Request) {
 		path, got = r.URL.Path, r.URL.Query()
 		_, _ = w.Write([]byte(`{"data":[]}`))
 	})
@@ -39,7 +37,7 @@ func TestFindCoverDecodesRealResponse(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read fixture: %v", err)
 	}
-	svc := newService(t, func(w http.ResponseWriter, _ *http.Request) {
+	svc := utils.NewDeezer(t, func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = w.Write(body)
 	})
 
@@ -58,25 +56,25 @@ func TestFindCoverMatching(t *testing.T) {
 		{
 			name:   "skips other artists",
 			artist: "Lena", title: "Say",
-			body: `{"data":[` + track("Say Yes", "Lana Del Rey", "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa") + `,` + track("SAY (feat. T.R.I)", "Lena", sayCover) + `]}`,
-			want: sayCover,
+			body: `{"data":[` + track("Say Yes", "Lana Del Rey", "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa") + `,` + track("SAY (feat. T.R.I)", "Lena", utils.SayCover) + `]}`,
+			want: utils.SayCover,
 		},
 		{
 			name:   "prefers the same title",
 			artist: "Lena", title: "Say",
-			body: `{"data":[` + track("Satellite", "Lena", "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb") + `,` + track("SAY", "LENA", sayCover) + `]}`,
-			want: sayCover,
+			body: `{"data":[` + track("Satellite", "Lena", "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb") + `,` + track("SAY", "LENA", utils.SayCover) + `]}`,
+			want: utils.SayCover,
 		},
 		{
 			name:   "folds đ",
 			artist: "Đen", title: "Bài Này Chill Phết",
-			body: `{"data":[` + track("Bai Nay Chill Phet", "Den", sayCover) + `]}`,
-			want: sayCover,
+			body: `{"data":[` + track("Bai Nay Chill Phet", "Den", utils.SayCover) + `]}`,
+			want: utils.SayCover,
 		},
 		{
 			name:   "no artist match",
 			artist: "Lena", title: "Say",
-			body: `{"data":[` + track("Say", "Lana Del Rey", sayCover) + `]}`,
+			body: `{"data":[` + track("Say", "Lana Del Rey", utils.SayCover) + `]}`,
 			want: "",
 		},
 		{
@@ -106,7 +104,7 @@ func TestFindCoverMatching(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			svc := newService(t, func(w http.ResponseWriter, _ *http.Request) {
+			svc := utils.NewDeezer(t, func(w http.ResponseWriter, _ *http.Request) {
 				_, _ = w.Write([]byte(tt.body))
 			})
 
@@ -118,9 +116,9 @@ func TestFindCoverMatching(t *testing.T) {
 }
 
 func TestFindCoverHTTPFailure(t *testing.T) {
-	svc := newService(t, func(w http.ResponseWriter, _ *http.Request) {
+	svc := utils.NewDeezer(t, func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
-		_, _ = w.Write([]byte(`{"data":[` + track("Say", "Lena", sayCover) + `]}`))
+		_, _ = w.Write([]byte(`{"data":[` + track("Say", "Lena", utils.SayCover) + `]}`))
 	})
 
 	if got := svc.FindCover(t.Context(), "Lena", "Say"); got != "" {
@@ -130,12 +128,12 @@ func TestFindCoverHTTPFailure(t *testing.T) {
 
 func TestFindCoverCachesAnswers(t *testing.T) {
 	for _, tt := range []struct{ name, body, want string }{
-		{name: "cover", body: `{"data":[` + track("Say", "Lena", sayCover) + `]}`, want: sayCover},
+		{name: "cover", body: `{"data":[` + track("Say", "Lena", utils.SayCover) + `]}`, want: utils.SayCover},
 		{name: "no cover", body: `{"data":[]}`, want: ""},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			calls := 0
-			svc := newService(t, func(w http.ResponseWriter, _ *http.Request) {
+			svc := utils.NewDeezer(t, func(w http.ResponseWriter, _ *http.Request) {
 				calls++
 				_, _ = w.Write([]byte(tt.body))
 			})
@@ -156,28 +154,28 @@ func TestFindCoverCachesAnswers(t *testing.T) {
 
 func TestFindCoverDoesNotCacheFailures(t *testing.T) {
 	calls := 0
-	svc := newService(t, func(w http.ResponseWriter, _ *http.Request) {
+	svc := utils.NewDeezer(t, func(w http.ResponseWriter, _ *http.Request) {
 		calls++
 		if calls == 1 {
 			_, _ = w.Write([]byte(`{"error":{"type":"Exception","message":"Quota limit exceeded","code":4}}`))
 			return
 		}
-		_, _ = w.Write([]byte(`{"data":[` + track("Say", "Lena", sayCover) + `]}`))
+		_, _ = w.Write([]byte(`{"data":[` + track("Say", "Lena", utils.SayCover) + `]}`))
 	})
 
 	first := svc.FindCover(t.Context(), "Lena", "Say")
 	second := svc.FindCover(t.Context(), "Lena", "Say")
 
-	if first != "" || second != sayCover {
-		t.Errorf("covers = %q, %q; want none, then %q", first, second, sayCover)
+	if first != "" || second != utils.SayCover {
+		t.Errorf("covers = %q, %q; want none, then %q", first, second, utils.SayCover)
 	}
 }
 
 func TestFindCoverCancelled(t *testing.T) {
 	calls := 0
-	svc := newService(t, func(w http.ResponseWriter, _ *http.Request) {
+	svc := utils.NewDeezer(t, func(w http.ResponseWriter, _ *http.Request) {
 		calls++
-		_, _ = w.Write([]byte(`{"data":[` + track("Say", "Lena", sayCover) + `]}`))
+		_, _ = w.Write([]byte(`{"data":[` + track("Say", "Lena", utils.SayCover) + `]}`))
 	})
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
@@ -186,26 +184,26 @@ func TestFindCoverCancelled(t *testing.T) {
 	// A cancelled lookup is not remembered as no cover.
 	later := svc.FindCover(t.Context(), "Lena", "Say")
 
-	if cancelled != "" || later != sayCover {
-		t.Errorf("covers = %q, %q; want none, then %q", cancelled, later, sayCover)
+	if cancelled != "" || later != utils.SayCover {
+		t.Errorf("covers = %q, %q; want none, then %q", cancelled, later, utils.SayCover)
 	}
 }
 
 func TestFetch(t *testing.T) {
 	var path string
-	svc := newService(t, func(w http.ResponseWriter, r *http.Request) {
+	svc := utils.NewDeezer(t, func(w http.ResponseWriter, r *http.Request) {
 		path = r.URL.Path
 		w.Header().Set("Content-Type", "image/jpeg")
 		_, _ = w.Write([]byte("jpeg"))
 	})
 
-	resp, err := svc.Fetch(t.Context(), sayCover, 250)
+	resp, err := svc.Fetch(t.Context(), utils.SayCover, 250)
 	if err != nil {
 		t.Fatalf("Fetch: %v", err)
 	}
 	_ = resp.Body.Close()
 
-	if want := "/images/cover/" + sayCover + "/250x250-000000-80-0-0.jpg"; path != want {
+	if want := "/images/cover/" + utils.SayCover + "/250x250-000000-80-0-0.jpg"; path != want {
 		t.Errorf("path = %q, want %q", path, want)
 	}
 	if got := resp.Header.Get("Content-Type"); got != "image/jpeg" {
@@ -218,18 +216,16 @@ func TestFetch(t *testing.T) {
 func TestFetchStreamsSlowImages(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		const chunks = 8
-		svc := deezer.NewCoverArtService(&url.URL{Scheme: "http", Host: "deezer.test", Path: "/api/"},
-			&url.URL{Scheme: "http", Host: "deezer.test", Path: "/images/cover/"},
-			roundTripFunc(func(r *http.Request) (*http.Response, error) {
-				return &http.Response{
-					StatusCode: http.StatusOK,
-					Header:     http.Header{"Content-Type": {"image/jpeg"}},
-					Body:       &slowBody{ctx: r.Context(), chunks: chunks},
-					Request:    r,
-				}, nil
-			}))
+		svc := utils.NewDeezerOn(roundTripFunc(func(r *http.Request) (*http.Response, error) {
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Header:     http.Header{"Content-Type": {"image/jpeg"}},
+				Body:       &slowBody{ctx: r.Context(), chunks: chunks},
+				Request:    r,
+			}, nil
+		}))
 
-		resp, err := svc.Fetch(t.Context(), sayCover, 1000)
+		resp, err := svc.Fetch(t.Context(), utils.SayCover, 1000)
 		if err != nil {
 			t.Fatalf("Fetch: %v", err)
 		}
@@ -245,15 +241,13 @@ func TestFetchStreamsSlowImages(t *testing.T) {
 // The timeout still bounds a CDN that does not answer at all.
 func TestFetchTimesOutWaitingForCDN(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		svc := deezer.NewCoverArtService(&url.URL{Scheme: "http", Host: "deezer.test", Path: "/api/"},
-			&url.URL{Scheme: "http", Host: "deezer.test", Path: "/images/cover/"},
-			roundTripFunc(func(r *http.Request) (*http.Response, error) {
-				<-r.Context().Done()
-				return nil, r.Context().Err()
-			}))
+		svc := utils.NewDeezerOn(roundTripFunc(func(r *http.Request) (*http.Response, error) {
+			<-r.Context().Done()
+			return nil, r.Context().Err()
+		}))
 		start := time.Now()
 
-		_, err := svc.Fetch(t.Context(), sayCover, 1000)
+		_, err := svc.Fetch(t.Context(), utils.SayCover, 1000)
 
 		if err == nil {
 			t.Fatal("Fetch succeeded, want a timeout")
@@ -297,13 +291,13 @@ func TestFetchErrors(t *testing.T) {
 		notFound bool
 	}{
 		{name: "invalid id", id: "../../etc", status: http.StatusOK, notFound: true},
-		{name: "404", id: sayCover, status: http.StatusNotFound, notFound: true},
-		{name: "500", id: sayCover, status: http.StatusInternalServerError, notFound: false},
+		{name: "404", id: utils.SayCover, status: http.StatusNotFound, notFound: true},
+		{name: "500", id: utils.SayCover, status: http.StatusInternalServerError, notFound: false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			called := false
-			svc := newService(t, func(w http.ResponseWriter, _ *http.Request) {
+			svc := utils.NewDeezer(t, func(w http.ResponseWriter, _ *http.Request) {
 				called = true
 				w.WriteHeader(tt.status)
 			})
@@ -326,7 +320,7 @@ func TestFetchErrors(t *testing.T) {
 
 func TestValidCoverID(t *testing.T) {
 	for id, want := range map[string]bool{
-		sayCover:                            true,
+		utils.SayCover:                      true,
 		"":                                  false,
 		"911A6E5E5E5D64DFF4E73094BEAE7783":  false,
 		"911a6e5e5e5d64dff4e73094beae778":   false,
@@ -343,15 +337,4 @@ func TestValidCoverID(t *testing.T) {
 // track is a Deezer search match.
 func track(title, artist, cover string) string {
 	return `{"title":"` + title + `","artist":{"name":"` + artist + `"},"album":{"md5_image":"` + cover + `"}}`
-}
-
-// newService returns a CoverArtService whose API calls, under /api/, and image
-// fetches, under /images/cover/, go to a test server running handler.
-func newService(t *testing.T, handler http.HandlerFunc) *deezer.CoverArtService {
-	t.Helper()
-	srv := httptest.NewServer(handler)
-	t.Cleanup(srv.Close)
-	apiURL, _ := url.Parse(srv.URL + "/api/")
-	imageURL, _ := url.Parse(srv.URL + "/images/cover/")
-	return deezer.NewCoverArtService(apiURL, imageURL, nil)
 }

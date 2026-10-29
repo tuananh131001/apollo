@@ -3,7 +3,6 @@ package deezer_test
 import (
 	"io"
 	"net/http"
-	"net/url"
 	"strconv"
 	"strings"
 	"sync"
@@ -12,6 +11,7 @@ import (
 	"time"
 
 	"github.com/tuananh131001/apollo/internal/deezer"
+	"github.com/tuananh131001/apollo/test/utils"
 )
 
 // The cache tests run in a synctest bubble so its clock can jump hours ahead,
@@ -24,7 +24,7 @@ func TestFindCoverCacheExpires(t *testing.T) {
 		// stale how long until Deezer is asked again.
 		fresh, stale time.Duration
 	}{
-		{name: "cover", body: `{"data":[` + track("Say", "Lena", sayCover) + `]}`, fresh: 23 * time.Hour, stale: 25 * time.Hour},
+		{name: "cover", body: `{"data":[` + track("Say", "Lena", utils.SayCover) + `]}`, fresh: 23 * time.Hour, stale: 25 * time.Hour},
 		{name: "no cover", body: `{"data":[]}`, fresh: 59 * time.Minute, stale: 61 * time.Minute},
 	}
 	for _, tt := range tests {
@@ -55,7 +55,7 @@ func TestFindCoverCacheEvictsLeastRecentlyUsed(t *testing.T) {
 		deezer := newMemoryDeezer(func(r *http.Request) string {
 			// Every song is by Lena, so every lookup finds a cover.
 			title := strings.TrimPrefix(r.URL.Query().Get("q"), "Lena ")
-			return `{"data":[` + track(title, "Lena", sayCover) + `]}`
+			return `{"data":[` + track(title, "Lena", utils.SayCover) + `]}`
 		})
 		svc := deezer.service()
 
@@ -89,7 +89,7 @@ func TestFindCoverConcurrentLookups(t *testing.T) {
 		deezer := newMemoryDeezer(func(*http.Request) string {
 			arrived <- struct{}{}
 			<-release
-			return `{"data":[` + track("Say", "Lena", sayCover) + `]}`
+			return `{"data":[` + track("Say", "Lena", utils.SayCover) + `]}`
 		})
 		svc := deezer.service()
 
@@ -102,8 +102,8 @@ func TestFindCoverConcurrentLookups(t *testing.T) {
 		close(release)
 		wg.Wait()
 
-		if got := svc.FindCover(t.Context(), "Lena", "Say"); got != sayCover {
-			t.Errorf("cover = %q, want %q", got, sayCover)
+		if got := svc.FindCover(t.Context(), "Lena", "Say"); got != utils.SayCover {
+			t.Errorf("cover = %q, want %q", got, utils.SayCover)
 		}
 		if got := deezer.Calls(); got != 2 {
 			t.Errorf("deezer calls = %d, want 2", got)
@@ -143,7 +143,5 @@ func (d *memoryDeezer) Calls() int {
 
 // service returns a CoverArtService that sends its requests to d.
 func (d *memoryDeezer) service() *deezer.CoverArtService {
-	apiURL, _ := url.Parse("http://deezer.test/api/")
-	imageURL, _ := url.Parse("http://deezer.test/images/cover/")
-	return deezer.NewCoverArtService(apiURL, imageURL, d)
+	return utils.NewDeezerOn(d)
 }

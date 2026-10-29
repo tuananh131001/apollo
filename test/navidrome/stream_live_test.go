@@ -30,6 +30,7 @@ import (
 	"github.com/tuananh131001/apollo/internal/navidrome"
 	"github.com/tuananh131001/apollo/internal/server"
 	"github.com/tuananh131001/apollo/internal/youtube"
+	"github.com/tuananh131001/apollo/test/utils"
 )
 
 // minAudioSize is the least a full song should weigh at ~128 kbps.
@@ -213,7 +214,7 @@ func startLiveApollo(t *testing.T) liveApollo {
 	tracks := lastfm.NewTrackService("test-api-key", base, nil)
 
 	proxy := navidrome.NewRestProxy(nd, nil,
-		navidrome.NewInterceptSearchService(tracks, newFakeDeezer(t, noCovers), nd, nil),
+		navidrome.NewInterceptSearchService(tracks, utils.NewDeezer(t, noCovers), nd, nil),
 		navidrome.NewInterceptStreamService(youtube.NewAudioService(ytdlp, 4), time.Minute, nd, nil),
 	)
 	srv := httptest.NewServer(server.NewHandler(proxy))

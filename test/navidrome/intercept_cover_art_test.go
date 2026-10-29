@@ -2,7 +2,6 @@ package navidrome_test
 
 import (
 	"net/http"
-	"net/http/httptest"
 	"net/url"
 	"slices"
 	"strings"
@@ -10,16 +9,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/tuananh131001/apollo/internal/deezer"
 	"github.com/tuananh131001/apollo/internal/navidrome"
 	"github.com/tuananh131001/apollo/test/utils"
 )
 
-// sayCover is the Deezer cover id of Lena's "Say".
-const sayCover = "911a6e5e5e5d64dff4e73094beae7783"
-
 // sayOnDeezer is a Deezer search response holding Lena's "Say".
-const sayOnDeezer = `{"data":[{"title":"Say","artist":{"name":"Lena"},"album":{"md5_image":"` + sayCover + `"}}],"total":1}`
+const sayOnDeezer = `{"data":[{"title":"Say","artist":{"name":"Lena"},"album":{"md5_image":"` + utils.SayCover + `"}}],"total":1}`
 
 // coverImage stands in for a cover's JPEG bytes.
 const coverImage = "\xff\xd8\xff fake jpeg"
@@ -29,18 +24,7 @@ func noCovers(w http.ResponseWriter, _ *http.Request) {
 	_, _ = w.Write([]byte(`{"data":[],"total":0}`))
 }
 
-// newFakeDeezer returns a CoverArtService whose API calls, under /api/, and
-// image fetches, under /images/cover/, go to a test server running handler.
-func newFakeDeezer(t *testing.T, handler http.HandlerFunc) *deezer.CoverArtService {
-	t.Helper()
-	srv := httptest.NewServer(handler)
-	t.Cleanup(srv.Close)
-	apiURL, _ := url.Parse(srv.URL + "/api/")
-	imageURL, _ := url.Parse(srv.URL + "/images/cover/")
-	return deezer.NewCoverArtService(apiURL, imageURL, nil)
-}
-
-// fakeCDN serves coverImage for sayCover's images and records the paths it is
+// fakeCDN serves coverImage for utils.SayCover's images and records the paths it is
 // asked for.
 type fakeCDN struct {
 	mu    sync.Mutex
@@ -51,7 +35,7 @@ func (c *fakeCDN) serve(w http.ResponseWriter, r *http.Request) {
 	c.mu.Lock()
 	c.paths = append(c.paths, r.URL.Path)
 	c.mu.Unlock()
-	if !strings.HasPrefix(r.URL.Path, "/images/cover/"+sayCover+"/") {
+	if !strings.HasPrefix(r.URL.Path, "/images/cover/"+utils.SayCover+"/") {
 		http.NotFound(w, r)
 		return
 	}
@@ -81,8 +65,8 @@ func TestInterceptSearchAddsDeezerCover(t *testing.T) {
 	if len(songs) != 1 {
 		t.Fatalf("songs = %+v, want 1", songs)
 	}
-	if songs[0]["coverArt"] != "dz-"+sayCover {
-		t.Errorf("coverArt = %v, want dz-%s", songs[0]["coverArt"], sayCover)
+	if songs[0]["coverArt"] != "dz-"+utils.SayCover {
+		t.Errorf("coverArt = %v, want dz-%s", songs[0]["coverArt"], utils.SayCover)
 	}
 	if want := navidrome.LastFMSongID("Lena", "Say"); songs[0]["id"] != want {
 		t.Errorf("id = %v, want %s", songs[0]["id"], want)
@@ -201,7 +185,7 @@ func TestInterceptCoverArtServesDeezerImage(t *testing.T) {
 	cdn := &fakeCDN{}
 	proxy := newCoverArtProxy(t, nd.URL, cdn.serve)
 
-	rec := utils.Serve(proxy, "/rest/getCoverArt.view?"+streamQuery(ndUser, ndPassword, "dz-"+sayCover)+"&size=300")
+	rec := utils.Serve(proxy, "/rest/getCoverArt.view?"+streamQuery(ndUser, ndPassword, "dz-"+utils.SayCover)+"&size=300")
 
 	if rec.Code != http.StatusOK || rec.Body.String() != coverImage {
 		t.Fatalf("response = %d %q, want 200 with the image", rec.Code, rec.Body)
@@ -212,7 +196,7 @@ func TestInterceptCoverArtServesDeezerImage(t *testing.T) {
 	if got := rec.Header().Get("Cache-Control"); !strings.Contains(got, "max-age=") {
 		t.Errorf("Cache-Control = %q, want a max-age", got)
 	}
-	want := []string{"/images/cover/" + sayCover + "/300x300-000000-80-0-0.jpg"}
+	want := []string{"/images/cover/" + utils.SayCover + "/300x300-000000-80-0-0.jpg"}
 	if paths := cdn.Paths(); !slices.Equal(paths, want) {
 		t.Errorf("cdn paths = %v, want %v", paths, want)
 	}
@@ -234,9 +218,9 @@ func TestInterceptCoverArtSize(t *testing.T) {
 			cdn := &fakeCDN{}
 			proxy := newCoverArtProxy(t, newFakeNavidrome(t).URL, cdn.serve)
 
-			utils.Serve(proxy, "/rest/getCoverArt.view?"+streamQuery(ndUser, ndPassword, "dz-"+sayCover)+"&size="+tt.size)
+			utils.Serve(proxy, "/rest/getCoverArt.view?"+streamQuery(ndUser, ndPassword, "dz-"+utils.SayCover)+"&size="+tt.size)
 
-			want := []string{"/images/cover/" + sayCover + "/" + tt.want + "-000000-80-0-0.jpg"}
+			want := []string{"/images/cover/" + utils.SayCover + "/" + tt.want + "-000000-80-0-0.jpg"}
 			if paths := cdn.Paths(); !slices.Equal(paths, want) {
 				t.Errorf("cdn paths = %v, want %v", paths, want)
 			}
@@ -249,7 +233,7 @@ func TestInterceptCoverArtRejectsCredentialsLikeNavidrome(t *testing.T) {
 	cdn := &fakeCDN{}
 	proxy := newCoverArtProxy(t, nd.URL, cdn.serve)
 
-	rec := utils.Serve(proxy, "/rest/getCoverArt.view?"+streamQuery(ndUser, "wrong", "dz-"+sayCover))
+	rec := utils.Serve(proxy, "/rest/getCoverArt.view?"+streamQuery(ndUser, "wrong", "dz-"+utils.SayCover))
 
 	resp := utils.DecodeJSON[jsonEnvelope](t, rec).Response
 	want := subsonicError{Code: 40, Message: "Wrong username or password"}
@@ -299,7 +283,7 @@ func TestInterceptCoverArtCDNFailure(t *testing.T) {
 		w.WriteHeader(http.StatusBadGateway)
 	})
 
-	rec := utils.Serve(proxy, "/rest/getCoverArt.view?"+streamQuery(ndUser, ndPassword, "dz-"+sayCover))
+	rec := utils.Serve(proxy, "/rest/getCoverArt.view?"+streamQuery(ndUser, ndPassword, "dz-"+utils.SayCover))
 
 	resp := utils.DecodeJSON[jsonEnvelope](t, rec).Response
 	if resp.Status != "failed" || resp.Error.Code != 0 {
@@ -315,7 +299,7 @@ func TestInterceptCoverArtForwardsLibraryCovers(t *testing.T) {
 	for _, target := range []string{
 		"/rest/getCoverArt.view?" + streamQuery(ndUser, ndPassword, "al-7orkzq9nRdgry1xMEZTmRw"),
 		"/rest/getCoverArt?" + subsonicQuery(ndUser, ndPassword),
-		"/rest/getSong.view?" + streamQuery(ndUser, ndPassword, "dz-"+sayCover),
+		"/rest/getSong.view?" + streamQuery(ndUser, ndPassword, "dz-"+utils.SayCover),
 	} {
 		t.Run(target, func(t *testing.T) {
 			u, _ := url.Parse(target)
@@ -345,6 +329,6 @@ type rawSearchEnvelope struct {
 // deezerHandler.
 func newCoverArtProxy(t *testing.T, upstream *url.URL, deezerHandler http.HandlerFunc) *navidrome.RestProxy {
 	t.Helper()
-	coverArt := navidrome.NewInterceptCoverArtService(newFakeDeezer(t, deezerHandler), upstream, nil)
+	coverArt := navidrome.NewInterceptCoverArtService(utils.NewDeezer(t, deezerHandler), upstream, nil)
 	return navidrome.NewRestProxy(upstream, nil, coverArt)
 }
