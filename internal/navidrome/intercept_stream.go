@@ -57,18 +57,8 @@ func (s *InterceptStreamService) Intercept(w http.ResponseWriter, r *http.Reques
 	if !strings.HasPrefix(id, lastFMSongIDPrefix) {
 		return false
 	}
-	// Answer as if every parameter came in the query string, so those sent in
-	// a form body also pick the response format and authenticate the client.
-	r = r.Clone(r.Context())
-	r.URL.RawQuery = q.Encode()
-
-	nd, err := s.auth.authenticate(r)
-	if err != nil {
-		writeUnavailable(w, r, err)
-		return true
-	}
-	if nd.Status != "ok" {
-		writeResponse(w, r, http.StatusOK, nd)
+	r, nd, ok := s.auth.authorize(w, r, q)
+	if !ok {
 		return true
 	}
 
@@ -108,7 +98,8 @@ func (s *InterceptStreamService) Intercept(w http.ResponseWriter, r *http.Reques
 }
 
 // writeSongError answers with a Subsonic error in nd's envelope and logs why
-// the song could not be played, unless the client has already gone. A song
+// the song could not be played or looked up, unless the client has already
+// gone. A song
 // YouTube Music does not have is error 70 and a warning; anything else is a
 // failure apollo's operator should look at.
 func writeSongError(w http.ResponseWriter, r *http.Request, nd subsonicResponse, id string, err error) {

@@ -41,6 +41,12 @@ type InterceptStreamService struct {
 	auth         authenticator
 }
 
+// InterceptSongService answers getSong for Last.fm songs, found by
+// LastFMSongID ids, so clients can look them up before playing them.
+type InterceptSongService struct {
+	auth authenticator
+}
+
 // Subsonic response envelope used when apollo answers a /rest/* request itself.
 // The same struct encodes to JSON (inside jsonEnvelope) and to XML.
 
@@ -58,6 +64,7 @@ type subsonicResponse struct {
 	OpenSubsonic  bool           `json:"openSubsonic,omitempty" xml:"openSubsonic,attr,omitempty"`
 	Error         *subsonicError `json:"error,omitempty" xml:"error,omitempty"`
 	SearchResult3 *searchResult3 `json:"searchResult3,omitempty" xml:"searchResult3,omitempty"`
+	Song          *song          `json:"song,omitempty" xml:"song,omitempty"`
 }
 
 type subsonicError struct {

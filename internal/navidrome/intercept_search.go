@@ -62,20 +62,10 @@ func (s *InterceptSearchService) Intercept(w http.ResponseWriter, r *http.Reques
 	if !ok {
 		return false
 	}
-	// Answer as if every parameter came in the query string, so those sent in
-	// a form body also pick the response format and authenticate the client.
-	r = r.Clone(r.Context())
-	r.URL.RawQuery = q.Encode()
-
 	// Authenticate like Navidrome would, so a search command fails, and
 	// succeeds, with the same envelope as a library search.
-	nd, err := s.auth.authenticate(r)
-	if err != nil {
-		writeUnavailable(w, r, err)
-		return true
-	}
-	if nd.Status != "ok" {
-		writeResponse(w, r, http.StatusOK, nd)
+	r, nd, ok := s.auth.authorize(w, r, q)
+	if !ok {
 		return true
 	}
 
@@ -85,7 +75,7 @@ func (s *InterceptSearchService) Intercept(w http.ResponseWriter, r *http.Reques
 	limit, wantSongs := songPage(q)
 	if track != "" && wantSongs {
 		for _, t := range s.tracks.SearchTrack(r.Context(), track, artist, limit) {
-			result.Song = append(result.Song, newLastFMSong(t))
+			result.Song = append(result.Song, lastFMSong(t.Artist, t.Name))
 		}
 	}
 	nd.SearchResult3 = result
@@ -139,17 +129,4 @@ func songPage(q url.Values) (limit int, ok bool) {
 		return 0, false
 	}
 	return limit, limit > 0
-}
-
-// newLastFMSong converts a Last.fm match to a Subsonic song. Last.fm tracks
-// are not in Navidrome, so they have no file details; the fields are still
-// sent because clients such as Feishin fail on songs without them.
-func newLastFMSong(t lastfm.Track) song {
-	return song{
-		ID:         LastFMSongID(t.Artist, t.Name),
-		Title:      t.Name,
-		Artist:     t.Artist,
-		Type:       "music",
-		DiscNumber: 1,
-	}
 }
