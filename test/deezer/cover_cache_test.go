@@ -40,7 +40,7 @@ func TestFindCoverCacheExpires(t *testing.T) {
 				if got := deezer.Calls(); got != 1 {
 					t.Errorf("deezer calls after %v = %d, want 1 (cached)", tt.fresh, got)
 				}
-				time.Sleep(start.Add(tt.stale).Sub(time.Now()))
+				time.Sleep(time.Until(start.Add(tt.stale)))
 				svc.FindCover(t.Context(), "Lena", "Say")
 				if got := deezer.Calls(); got != 2 {
 					t.Errorf("deezer calls after %v = %d, want 2 (expired)", tt.stale, got)
