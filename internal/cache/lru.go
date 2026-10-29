@@ -49,13 +49,3 @@ func (c *LRU[V]) Put(key string, value V, ttl time.Duration) {
 		delete(c.entries, oldest.Value.(*entry[V]).key)
 	}
 }
-
-// Delete forgets key.
-func (c *LRU[V]) Delete(key string) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	if el, ok := c.entries[key]; ok {
-		c.order.Remove(el)
-		delete(c.entries, key)
-	}
-}
