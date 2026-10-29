@@ -42,6 +42,23 @@ checked against Navidrome first (via `ping`), so a search command needs the
 same authentication as a library search and fails with Navidrome's error.
 Last.fm failures are logged and the client gets an empty result.
 
+Last.fm songs play from YouTube Music: `stream` and `download` for a `lastfm-`
+song id run [yt-dlp](https://github.com/yt-dlp/yt-dlp) (`APOLLO_YTDLP_PATH`,
+default `yt-dlp` from `PATH`) and pipe its ~128 kbps AAC audio to the client.
+yt-dlp needs [deno](https://deno.com) on `PATH` for YouTube; the Docker image
+ships both. At most `APOLLO_YTDLP_MAX_CONCURRENT` songs (default 4) stream at
+once, and a stream ends when the client accepts no audio for
+`APOLLO_STREAM_WRITE_TIMEOUT` (default 30s). A song YouTube Music doesn't have is Subsonic error 70; any other failure
+is error 0 and is logged as an error.
+
+The live tests in `test/navidrome/stream_live_test.go` play songs through a
+real Navidrome and yt-dlp, and are skipped unless those are configured:
+
+```sh
+APOLLO_NAVIDROME_URL=http://localhost:4533 NAVIDROME_USER=admin \
+NAVIDROME_PASSWORD=secret APOLLO_YTDLP_PATH=/path/to/yt-dlp go test ./test/...
+```
+
 The Navidrome proxy tests replay go-vcr cassettes from
 `test/navidrome/testdata/cassettes`. To re-record them against a real server:
 
