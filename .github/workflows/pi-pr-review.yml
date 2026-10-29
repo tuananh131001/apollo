@@ -33,7 +33,7 @@ jobs:
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           provider: opencode-go
-          model: kimi-k3.1-pro
+          model: glm-5.3
           thinking_level: low
           token: ${{ secrets.OPENCODE_API_KEY }}
           update_comment: true
