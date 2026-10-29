@@ -462,8 +462,16 @@ func (nd *fakeNavidrome) Forwarded() []string {
 
 // newInterceptingProxy returns a RestProxy in front of the Navidrome at
 // upstream whose "/s" searches go to a Last.fm test server running
-// lastfmHandler.
+// lastfmHandler, and find no covers on Deezer.
 func newInterceptingProxy(t *testing.T, upstream *url.URL, lastfmHandler http.HandlerFunc) *navidrome.RestProxy {
+	t.Helper()
+	return newCoveringProxy(t, upstream, lastfmHandler, noCovers)
+}
+
+// newCoveringProxy returns a RestProxy in front of the Navidrome at upstream
+// whose "/s" searches go to a Last.fm test server running lastfmHandler, with
+// covers from a Deezer test server running deezerHandler.
+func newCoveringProxy(t *testing.T, upstream *url.URL, lastfmHandler, deezerHandler http.HandlerFunc) *navidrome.RestProxy {
 	t.Helper()
 	srv := httptest.NewServer(lastfmHandler)
 	t.Cleanup(srv.Close)
@@ -472,7 +480,7 @@ func newInterceptingProxy(t *testing.T, upstream *url.URL, lastfmHandler http.Ha
 		t.Fatalf("parse url: %v", err)
 	}
 	tracks := lastfm.NewTrackService("test-api-key", base, nil)
-	search := navidrome.NewInterceptSearchService(tracks, upstream, nil)
+	search := navidrome.NewInterceptSearchService(tracks, newFakeDeezer(t, deezerHandler), upstream, nil)
 	return navidrome.NewRestProxy(upstream, nil, search)
 }
 

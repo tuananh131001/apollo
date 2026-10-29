@@ -2,6 +2,7 @@ package navidrome
 
 import (
 	"bytes"
+	"context"
 	"io"
 	"mime"
 	"net/http"
@@ -9,7 +10,10 @@ import (
 	"path"
 	"strconv"
 	"strings"
+	"sync"
+	"time"
 
+	"github.com/tuananh131001/apollo/internal/deezer"
 	"github.com/tuananh131001/apollo/internal/lastfm"
 )
 
@@ -27,13 +31,22 @@ const defaultSongCount = 20
 // searches and are forwarded without being inspected.
 const maxFormSize = 64 << 10
 
+// maxCoverLookups caps how many Deezer cover lookups one search runs at once,
+// keeping a search well within Deezer's rate limit.
+const maxCoverLookups = 8
+
+// coverLookupTimeout bounds how long a search waits for covers; songs whose
+// lookup has not finished by then are answered without one.
+const coverLookupTimeout = 2 * time.Second
+
 // NewInterceptSearchService returns an InterceptSearchService that looks "/s"
-// searches up with tracks, after Navidrome at upstream has accepted the
-// client's credentials. Navidrome is reached through transport, or
-// http.DefaultTransport when transport is nil.
-func NewInterceptSearchService(tracks *lastfm.TrackService, upstream *url.URL, transport http.RoundTripper) *InterceptSearchService {
+// searches up with tracks and their album covers with covers, after Navidrome
+// at upstream has accepted the client's credentials. Navidrome is reached
+// through transport, or http.DefaultTransport when transport is nil.
+func NewInterceptSearchService(tracks *lastfm.TrackService, covers *deezer.CoverArtService, upstream *url.URL, transport http.RoundTripper) *InterceptSearchService {
 	return &InterceptSearchService{
 		tracks: tracks,
+		covers: covers,
 		auth:   newAuthenticator(upstream, transport),
 	}
 }
@@ -74,13 +87,35 @@ func (s *InterceptSearchService) Intercept(w http.ResponseWriter, r *http.Reques
 	// for no songs (clients searching only albums or artists) are left empty.
 	limit, wantSongs := songPage(q)
 	if track != "" && wantSongs {
-		for _, t := range s.tracks.SearchTrack(r.Context(), track, artist, limit) {
-			result.Song = append(result.Song, lastFMSong(t.Artist, t.Name))
-		}
+		result.Song = s.songs(r, s.tracks.SearchTrack(r.Context(), track, artist, limit))
 	}
 	nd.SearchResult3 = result
 	writeResponse(w, r, http.StatusOK, nd)
 	return true
+}
+
+// songs returns tracks as Subsonic songs, in the same order, with the album
+// covers Deezer finds for them within coverLookupTimeout.
+func (s *InterceptSearchService) songs(r *http.Request, tracks []lastfm.Track) []song {
+	ctx, cancel := context.WithTimeout(r.Context(), coverLookupTimeout)
+	defer cancel()
+	covers := make([]string, len(tracks))
+	sem := make(chan struct{}, maxCoverLookups)
+	var wg sync.WaitGroup
+	for i, t := range tracks {
+		wg.Go(func() {
+			sem <- struct{}{}
+			defer func() { <-sem }()
+			covers[i] = s.covers.FindCover(ctx, t.Artist, t.Name)
+		})
+	}
+	wg.Wait()
+
+	songs := make([]song, len(tracks))
+	for i, t := range tracks {
+		songs[i] = lastFMSong(t.Artist, t.Name, covers[i])
+	}
+	return songs
 }
 
 // requestParams returns r's Subsonic parameters: the query string plus, for a

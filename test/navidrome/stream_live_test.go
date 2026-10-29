@@ -213,7 +213,7 @@ func startLiveApollo(t *testing.T) liveApollo {
 	tracks := lastfm.NewTrackService("test-api-key", base, nil)
 
 	proxy := navidrome.NewRestProxy(nd, nil,
-		navidrome.NewInterceptSearchService(tracks, nd, nil),
+		navidrome.NewInterceptSearchService(tracks, newFakeDeezer(t, noCovers), nd, nil),
 		navidrome.NewInterceptStreamService(youtube.NewAudioService(ytdlp, 4), time.Minute, nd, nil),
 	)
 	srv := httptest.NewServer(server.NewHandler(proxy))

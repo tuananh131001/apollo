@@ -1,19 +1,23 @@
 package navidrome
 
 import (
+	"context"
 	"net/http"
 	"net/url"
 	"path"
 	"strings"
+
+	"github.com/tuananh131001/apollo/internal/deezer"
 )
 
 // NewInterceptSongService returns an InterceptSongService that describes
-// Last.fm songs, after Navidrome at upstream has accepted the client's
-// credentials. Navidrome is reached through transport, or
-// http.DefaultTransport when transport is nil.
-func NewInterceptSongService(upstream *url.URL, transport http.RoundTripper) *InterceptSongService {
+// Last.fm songs, with their album covers from covers, after Navidrome at
+// upstream has accepted the client's credentials. Navidrome is reached through
+// transport, or http.DefaultTransport when transport is nil.
+func NewInterceptSongService(covers *deezer.CoverArtService, upstream *url.URL, transport http.RoundTripper) *InterceptSongService {
 	return &InterceptSongService{
-		auth: newAuthenticator(upstream, transport),
+		covers: covers,
+		auth:   newAuthenticator(upstream, transport),
 	}
 }
 
@@ -40,7 +44,11 @@ func (s *InterceptSongService) Intercept(w http.ResponseWriter, r *http.Request)
 		writeSongError(w, r, nd, id, errMalformedSongID)
 		return true
 	}
-	song := lastFMSong(artist, title)
+	// The cover is looked up as the search did, usually from the cache, so the
+	// song matches the one the search returned.
+	ctx, cancel := context.WithTimeout(r.Context(), coverLookupTimeout)
+	defer cancel()
+	song := lastFMSong(artist, title, s.covers.FindCover(ctx, artist, title))
 	nd.Song = &song
 	writeResponse(w, r, http.StatusOK, nd)
 	return true
