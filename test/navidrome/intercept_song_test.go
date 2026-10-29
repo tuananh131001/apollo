@@ -26,7 +26,7 @@ type songEnvelope struct {
 // when the lookup fails.
 func TestInterceptSongAnswersLastFMSong(t *testing.T) {
 	nd := newFakeNavidrome(t)
-	proxy := newSongProxy(nd.URL)
+	proxy := newSongProxy(t, nd.URL, noCovers)
 	id := navidrome.LastFMSongID("Justin Bieber", "Baby")
 
 	rec := utils.Serve(proxy, "/rest/getSong.view?"+streamQuery(ndUser, ndPassword, id))
@@ -47,22 +47,21 @@ func TestInterceptSongAnswersLastFMSong(t *testing.T) {
 // treats both the same.
 func TestInterceptSongMatchesSearchResult(t *testing.T) {
 	nd := newFakeNavidrome(t)
-	search := newInterceptingProxy(t, nd.URL, func(w http.ResponseWriter, _ *http.Request) {
+	search := newCoveringProxy(t, nd.URL, func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = w.Write([]byte(sayByLena))
+	}, func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(sayOnDeezer))
 	})
-	type rawEnvelope struct {
-		Response struct {
-			SearchResult3 struct {
-				Song []map[string]any `json:"song"`
-			} `json:"searchResult3"`
-		} `json:"subsonic-response"`
-	}
-	found := utils.DecodeJSON[rawEnvelope](t, utils.Serve(search, "/rest/search3.view?"+searchQuery(ndUser, ndPassword, "/s say"))).Response.SearchResult3.Song
-	if len(found) != 1 {
-		t.Fatalf("search songs = %+v, want 1", found)
+	found := utils.DecodeJSON[rawSearchEnvelope](t, utils.Serve(search, "/rest/search3.view?"+searchQuery(ndUser, ndPassword, "/s say"))).Response.SearchResult3.Song
+	if len(found) != 1 || found[0]["coverArt"] == nil {
+		t.Fatalf("search songs = %+v, want 1 with coverArt", found)
 	}
 
-	rec := utils.Serve(newSongProxy(nd.URL), "/rest/getSong.view?"+streamQuery(ndUser, ndPassword, found[0]["id"].(string)))
+	getSong := newSongProxy(t, nd.URL, func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(sayOnDeezer))
+	})
+
+	rec := utils.Serve(getSong, "/rest/getSong.view?"+streamQuery(ndUser, ndPassword, found[0]["id"].(string)))
 
 	got := utils.DecodeJSON[songEnvelope](t, rec).Response.Song
 	for k, v := range found[0] {
@@ -85,7 +84,7 @@ func TestInterceptSongAnswersXML(t *testing.T) {
 		"id": {navidrome.LastFMSongID("Lena", "Say")},
 	}
 
-	rec := utils.Serve(newSongProxy(nd.URL), "/rest/getSong?"+query.Encode())
+	rec := utils.Serve(newSongProxy(t, nd.URL, noCovers), "/rest/getSong?"+query.Encode())
 
 	if got := rec.Header().Get("Content-Type"); got != "application/xml" {
 		t.Errorf("Content-Type = %q, want application/xml", got)
@@ -107,7 +106,7 @@ func TestInterceptSongAnswersFormPost(t *testing.T) {
 	nd := newFakeNavidrome(t)
 	id := navidrome.LastFMSongID("Lena", "Say")
 
-	rec := servePost(newSongProxy(nd.URL), "/rest/getSong.view", streamQuery(ndUser, ndPassword, id))
+	rec := servePost(newSongProxy(t, nd.URL, noCovers), "/rest/getSong.view", streamQuery(ndUser, ndPassword, id))
 
 	resp := utils.DecodeJSON[songEnvelope](t, rec).Response
 	if resp.Status != "ok" || resp.Song["id"] != id {
@@ -118,7 +117,7 @@ func TestInterceptSongAnswersFormPost(t *testing.T) {
 func TestInterceptSongRejectsCredentialsLikeNavidrome(t *testing.T) {
 	nd := newFakeNavidrome(t)
 
-	rec := utils.Serve(newSongProxy(nd.URL), "/rest/getSong.view?"+streamQuery(ndUser, "wrong", navidrome.LastFMSongID("Lena", "Say")))
+	rec := utils.Serve(newSongProxy(t, nd.URL, noCovers), "/rest/getSong.view?"+streamQuery(ndUser, "wrong", navidrome.LastFMSongID("Lena", "Say")))
 
 	resp := utils.DecodeJSON[songEnvelope](t, rec).Response
 	want := subsonicError{Code: 40, Message: "Wrong username or password"}
@@ -129,7 +128,7 @@ func TestInterceptSongRejectsCredentialsLikeNavidrome(t *testing.T) {
 
 func TestInterceptSongRejectsMalformedID(t *testing.T) {
 	nd := newFakeNavidrome(t)
-	proxy := newSongProxy(nd.URL)
+	proxy := newSongProxy(t, nd.URL, noCovers)
 
 	for _, id := range []string{"lastfm-", "lastfm-!!!"} {
 		t.Run(id, func(t *testing.T) {
@@ -149,7 +148,7 @@ func TestInterceptSongRejectsMalformedID(t *testing.T) {
 func TestInterceptSongNavidromeUnreachable(t *testing.T) {
 	upstream := closedUpstream(t)
 
-	rec := utils.Serve(newSongProxy(upstream), "/rest/getSong.view?"+streamQuery(ndUser, ndPassword, navidrome.LastFMSongID("Lena", "Say")))
+	rec := utils.Serve(newSongProxy(t, upstream, noCovers), "/rest/getSong.view?"+streamQuery(ndUser, ndPassword, navidrome.LastFMSongID("Lena", "Say")))
 
 	if rec.Code != http.StatusBadGateway {
 		t.Fatalf("status = %d, want %d; body = %s", rec.Code, http.StatusBadGateway, rec.Body)
@@ -162,7 +161,7 @@ func TestInterceptSongNavidromeUnreachable(t *testing.T) {
 
 func TestInterceptSongForwardsOtherRequests(t *testing.T) {
 	nd := newFakeNavidrome(t)
-	proxy := newSongProxy(nd.URL)
+	proxy := newSongProxy(t, nd.URL, noCovers)
 
 	for _, target := range []string{
 		"/rest/getSong.view?" + streamQuery(ndUser, ndPassword, "library-song"),
@@ -184,7 +183,10 @@ func TestInterceptSongForwardsOtherRequests(t *testing.T) {
 }
 
 // newSongProxy returns a RestProxy in front of the Navidrome at upstream that
-// answers getSong for Last.fm songs.
-func newSongProxy(upstream *url.URL) *navidrome.RestProxy {
-	return navidrome.NewRestProxy(upstream, nil, navidrome.NewInterceptSongService(upstream, nil))
+// answers getSong for Last.fm songs, with covers from a Deezer test server
+// running deezerHandler.
+func newSongProxy(t *testing.T, upstream *url.URL, deezerHandler http.HandlerFunc) *navidrome.RestProxy {
+	t.Helper()
+	song := navidrome.NewInterceptSongService(utils.NewDeezer(t, deezerHandler), upstream, nil)
+	return navidrome.NewRestProxy(upstream, nil, song)
 }

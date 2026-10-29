@@ -42,6 +42,17 @@ checked against Navidrome first (via `ping`), so a search command needs the
 same authentication as a library search and fails with Navidrome's error.
 Last.fm failures are logged and the client gets an empty result.
 
+Last.fm's own images are placeholders, so each result's album cover is looked
+up on [Deezer](https://developers.deezer.com/api/search) (no key needed): the
+first match by the same artist, ignoring case and accents, preferring the same
+title. Matched songs get a `dz-` `coverArt` id, and apollo answers
+`getCoverArt` for it with the image from Deezer's CDN, at the requested `size`
+(default and maximum 1000px). A search waits at most 2s for covers, and lookups
+are cached in memory (24h, or 1h when Deezer has no cover; failures are not
+cached), so repeated searches stay within Deezer's rate limit. A song Deezer
+doesn't match, or whose lookup fails or misses the 2s, has no `coverArt` and
+the client shows its own placeholder.
+
 Last.fm songs play from YouTube Music: `stream` and `download` for a `lastfm-`
 song id run [yt-dlp](https://github.com/yt-dlp/yt-dlp) (`APOLLO_YTDLP_PATH`,
 default `yt-dlp` from `PATH`) and pipe its ~128 kbps AAC audio to the client.

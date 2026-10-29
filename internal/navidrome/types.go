@@ -6,6 +6,7 @@ import (
 	"net/http/httputil"
 	"time"
 
+	"github.com/tuananh131001/apollo/internal/deezer"
 	"github.com/tuananh131001/apollo/internal/lastfm"
 	"github.com/tuananh131001/apollo/internal/youtube"
 )
@@ -27,9 +28,11 @@ type Interceptor interface {
 }
 
 // InterceptSearchService answers Subsonic searches written as "/s" commands
-// with Last.fm results instead of Navidrome's library.
+// with Last.fm results instead of Navidrome's library, with album covers found
+// on Deezer.
 type InterceptSearchService struct {
 	tracks *lastfm.TrackService
+	covers *deezer.CoverArtService
 	auth   authenticator
 }
 
@@ -44,7 +47,15 @@ type InterceptStreamService struct {
 // InterceptSongService answers getSong for Last.fm songs, found by
 // LastFMSongID ids, so clients can look them up before playing them.
 type InterceptSongService struct {
-	auth authenticator
+	covers *deezer.CoverArtService
+	auth   authenticator
+}
+
+// InterceptCoverArtService answers getCoverArt for the album covers of Last.fm
+// songs with images from Deezer.
+type InterceptCoverArtService struct {
+	covers *deezer.CoverArtService
+	auth   authenticator
 }
 
 // Subsonic response envelope used when apollo answers a /rest/* request itself.
@@ -93,4 +104,5 @@ type song struct {
 	Path        string `json:"path" xml:"path,attr"`
 	Created     string `json:"created" xml:"created,attr"`
 	Type        string `json:"type" xml:"type,attr"`
+	CoverArt    string `json:"coverArt,omitempty" xml:"coverArt,attr,omitempty"`
 }

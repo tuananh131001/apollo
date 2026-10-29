@@ -6,6 +6,7 @@ require (
 	github.com/go-chi/chi/v5 v5.5.0
 	github.com/joho/godotenv v1.5.1
 	github.com/lrstanley/go-ytdlp v1.5.6
+	golang.org/x/text v0.43.0
 	gopkg.in/dnaeon/go-vcr.v4 v4.0.7
 )
 

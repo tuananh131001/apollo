@@ -14,6 +14,7 @@ import (
 	"github.com/joho/godotenv"
 
 	"github.com/tuananh131001/apollo/internal/config"
+	"github.com/tuananh131001/apollo/internal/deezer"
 	"github.com/tuananh131001/apollo/internal/lastfm"
 	"github.com/tuananh131001/apollo/internal/navidrome"
 	"github.com/tuananh131001/apollo/internal/server"
@@ -47,14 +48,16 @@ func run() error {
 		slog.Warn("LASTFM_API_KEY is not set; /s searches will return no results")
 	}
 	tracks := lastfm.NewTrackService(cfg.LastFMAPIKey, lastfm.DefaultBaseURL, nil)
-	search := navidrome.NewInterceptSearchService(tracks, cfg.NavidromeURL, nil)
+	covers := deezer.NewCoverArtService(deezer.DefaultAPIURL, deezer.DefaultImageURL, nil)
+	search := navidrome.NewInterceptSearchService(tracks, covers, cfg.NavidromeURL, nil)
 	audio := youtube.NewAudioService(cfg.YtDlpPath, cfg.YtDlpMaxConcurrent)
 	if err := audio.Check(); err != nil {
 		slog.Warn("yt-dlp not found; Last.fm songs will not play", "path", cfg.YtDlpPath, "err", err)
 	}
 	stream := navidrome.NewInterceptStreamService(audio, cfg.StreamWriteTimeout, cfg.NavidromeURL, nil)
-	song := navidrome.NewInterceptSongService(cfg.NavidromeURL, nil)
-	restProxy := navidrome.NewRestProxy(cfg.NavidromeURL, nil, search, stream, song)
+	song := navidrome.NewInterceptSongService(covers, cfg.NavidromeURL, nil)
+	coverArt := navidrome.NewInterceptCoverArtService(covers, cfg.NavidromeURL, nil)
+	restProxy := navidrome.NewRestProxy(cfg.NavidromeURL, nil, search, stream, song, coverArt)
 	srv := &http.Server{Addr: cfg.Addr, Handler: server.NewHandler(restProxy)}
 
 	errCh := make(chan error, 1)

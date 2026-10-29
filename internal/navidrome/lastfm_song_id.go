@@ -10,6 +10,10 @@ import (
 // instead of forwarding to Navidrome.
 const lastFMSongIDPrefix = "lastfm-"
 
+// coverArtIDPrefix marks the cover art ids of Last.fm songs, Deezer cover ids
+// that apollo fetches itself instead of forwarding to Navidrome.
+const coverArtIDPrefix = "dz-"
+
 // LastFMSongID returns the Subsonic song id of a Last.fm track. The id carries
 // the artist and title, so it can be played without storing anything.
 func LastFMSongID(artist, title string) string {
@@ -36,16 +40,21 @@ func ParseLastFMSongID(id string) (artist, title string, ok bool) {
 	return v[0], v[1], true
 }
 
-// lastFMSong returns the Subsonic song of the Last.fm track artist - title.
-// Last.fm tracks are not in Navidrome, so they have no file details; the
-// fields are still sent because clients such as Feishin fail on songs without
-// them.
-func lastFMSong(artist, title string) song {
-	return song{
+// lastFMSong returns the Subsonic song of the Last.fm track artist - title,
+// with the Deezer album cover cover unless it is empty. Last.fm tracks are not
+// in Navidrome, so they have no file details; the fields are still sent
+// because clients such as Feishin fail on songs without them. The id leaves
+// the cover out, so a song keeps its id whether or not its cover was found.
+func lastFMSong(artist, title, cover string) song {
+	s := song{
 		ID:         LastFMSongID(artist, title),
 		Title:      title,
 		Artist:     artist,
 		Type:       "music",
 		DiscNumber: 1,
 	}
+	if cover != "" {
+		s.CoverArt = coverArtIDPrefix + cover
+	}
+	return s
 }
