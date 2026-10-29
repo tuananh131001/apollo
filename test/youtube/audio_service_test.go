@@ -27,6 +27,23 @@ func TestFetchReturnsAudio(t *testing.T) {
 	}
 }
 
+// yt-dlp's default YouTube clients wait about 5s for a pre-roll ad before the
+// audio starts; the visionos client, tried first, does not.
+func TestFetchPrefersPlayerClientWithoutAdWait(t *testing.T) {
+	s := youtube.NewAudioService(writeYtDlp(t, `printf '%s\n' "$@"`), 1)
+
+	audio, err := s.Fetch(context.Background(), "Lena", "Say")
+	if err != nil {
+		t.Fatalf("Fetch: %v", err)
+	}
+	defer func() { _ = audio.Close() }()
+	args, _ := io.ReadAll(audio)
+
+	if !strings.Contains(string(args), "youtube:player_client=visionos,default") {
+		t.Errorf("yt-dlp args = %q, want visionos first, then the default clients", args)
+	}
+}
+
 func TestFetchReportsNoMatchAsNotFound(t *testing.T) {
 	// yt-dlp succeeds without output when YouTube Music has no song.
 	s := youtube.NewAudioService(writeYtDlp(t, "exit 0"), 1)
@@ -91,6 +108,7 @@ func TestLookupReturnsDuration(t *testing.T) {
 	}
 }
 
+// The lookup asks the player client Fetch asks, so both find the same audio.
 func TestLookupDoesNotDownload(t *testing.T) {
 	args := filepath.Join(t.TempDir(), "args")
 	s := youtube.NewAudioService(writeYtDlp(t, "echo \"$@\" > '"+args+"'; echo '"+ytDlpSayJSON+"'"), 1)
@@ -100,7 +118,7 @@ func TestLookupDoesNotDownload(t *testing.T) {
 	}
 
 	got, _ := os.ReadFile(args)
-	for _, want := range []string{"--skip-download", "--dump-json", "music.youtube.com/search"} {
+	for _, want := range []string{"--skip-download", "--dump-json", "music.youtube.com/search", "youtube:player_client=visionos,default"} {
 		if !strings.Contains(string(got), want) {
 			t.Errorf("yt-dlp args = %q, want %s", got, want)
 		}

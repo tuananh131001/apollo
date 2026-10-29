@@ -65,6 +65,10 @@ YouTube Music with yt-dlp (no download; cached 1h) and answers with the
 `duration` of that audio, falling back to Deezer's when the lookup fails. A
 song YouTube Music doesn't have is answered without a `duration` and logged as
 a warning.
+yt-dlp asks YouTube's `visionos` player client first, falling back to yt-dlp's
+defaults: the default clients serve audio only after a pre-roll ad, which makes
+yt-dlp wait about 5s, so a song starts in about 4s instead of 9s. Clients such
+as Supersonic show the now-playing song and cover only once audio arrives.
 yt-dlp needs [deno](https://deno.com) on `PATH` for YouTube; the Docker image
 ships both. At most `APOLLO_YTDLP_MAX_CONCURRENT` songs (default 4) stream at
 once, and a stream ends when the client accepts no audio for
