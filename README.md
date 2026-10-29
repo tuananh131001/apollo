@@ -59,6 +59,10 @@ default `yt-dlp` from `PATH`) and pipe its ~128 kbps AAC audio to the client.
 `getSong` for a `lastfm-` id is answered by apollo too, with the same song the
 search returned, for clients such as Supersonic that look a song up before
 playing it.
+yt-dlp asks YouTube's `visionos` player client first, falling back to yt-dlp's
+defaults: the default clients serve audio only after a pre-roll ad, which makes
+yt-dlp wait about 5s, so a song starts in about 4s instead of 9s. Clients such
+as Supersonic show the now-playing song and cover only once audio arrives.
 yt-dlp needs [deno](https://deno.com) on `PATH` for YouTube; the Docker image
 ships both. At most `APOLLO_YTDLP_MAX_CONCURRENT` songs (default 4) stream at
 once, and a stream ends when the client accepts no audio for
