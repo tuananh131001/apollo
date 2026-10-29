@@ -29,18 +29,21 @@ jobs:
         with:
           node-version: 24
 
+      - name: Load review prompt
+        id: prompt
+        run: |
+          {
+            echo 'text<<PROMPT_EOF'
+            yq -r '.prompt' .github/prompts/pr-review.yml
+            echo 'PROMPT_EOF'
+          } >> "$GITHUB_OUTPUT"
+
       - uses: shaftoe/pi-coding-agent-action@v2.30.1
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           provider: opencode-go
-          model: glm-5.3-flash
-          thinking_level: high
+          model: kimi-k3.1-pro
+          thinking_level: low
           token: ${{ secrets.OPENCODE_API_KEY }}
           update_comment: true
-          prompt: |
-            Review this pull request against main.
-            First call get_issue_or_pr_thread to read existing review comments and avoid repeating them.
-            Then call get_pr_diff to inspect the changes.
-            Focus on correctness bugs, security issues, and Go idioms/maintainability; skip nitpicks.
-            Post your findings with create_pull_request_review, using inline comments on the
-            relevant lines and a short summary. If there are no real issues, say so briefly.
+          prompt: ${{ steps.prompt.outputs.text }}
