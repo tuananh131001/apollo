@@ -4,6 +4,7 @@ import (
 	"encoding/xml"
 	"net/http"
 	"net/http/httputil"
+	"time"
 
 	"github.com/tuananh131001/apollo/internal/lastfm"
 	"github.com/tuananh131001/apollo/internal/youtube"
@@ -35,8 +36,9 @@ type InterceptSearchService struct {
 // InterceptStreamService plays Last.fm songs, found by LastFMSongID ids, from
 // YouTube Music instead of Navidrome's library.
 type InterceptStreamService struct {
-	audio *youtube.AudioService
-	auth  authenticator
+	audio        *youtube.AudioService
+	writeTimeout time.Duration
+	auth         authenticator
 }
 
 // Subsonic response envelope used when apollo answers a /rest/* request itself.

@@ -16,6 +16,8 @@ func Load() (Config, error) {
 		ShutdownTimeout: 10 * time.Second,
 		LastFMAPIKey:    os.Getenv("LASTFM_API_KEY"),
 		YtDlpPath:       getenv("APOLLO_YTDLP_PATH", "yt-dlp"),
+
+		StreamWriteTimeout: 30 * time.Second,
 	}
 	n, err := strconv.Atoi(getenv("APOLLO_YTDLP_MAX_CONCURRENT", "4"))
 	if err != nil || n < 1 {
@@ -28,6 +30,13 @@ func Load() (Config, error) {
 			return Config{}, err
 		}
 		cfg.ShutdownTimeout = d
+	}
+	if v := os.Getenv("APOLLO_STREAM_WRITE_TIMEOUT"); v != "" {
+		d, err := time.ParseDuration(v)
+		if err != nil {
+			return Config{}, err
+		}
+		cfg.StreamWriteTimeout = d
 	}
 	// Accepts debug, info, warn or error; defaults to info.
 	if err := cfg.LogLevel.UnmarshalText([]byte(getenv("APOLLO_LOG_LEVEL", "info"))); err != nil {

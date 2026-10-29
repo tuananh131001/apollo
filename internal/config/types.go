@@ -16,5 +16,8 @@ type Config struct {
 	YtDlpPath string
 	// YtDlpMaxConcurrent caps how many Last.fm songs stream at once.
 	YtDlpMaxConcurrent int
+	// StreamWriteTimeout ends a Last.fm song stream, freeing its yt-dlp, when
+	// the client accepts no audio for this long.
+	StreamWriteTimeout time.Duration
 	LogLevel           slog.Level
 }

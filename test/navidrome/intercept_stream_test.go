@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/tuananh131001/apollo/internal/navidrome"
 	"github.com/tuananh131001/apollo/internal/youtube"
@@ -222,7 +223,7 @@ func (y fakeYtDlp) Ran() bool {
 // newStreamingProxy returns a RestProxy in front of the Navidrome at upstream
 // that plays Last.fm songs with the yt-dlp at ytdlpPath.
 func newStreamingProxy(upstream *url.URL, ytdlpPath string) *navidrome.RestProxy {
-	stream := navidrome.NewInterceptStreamService(youtube.NewAudioService(ytdlpPath, 4), upstream, nil)
+	stream := navidrome.NewInterceptStreamService(youtube.NewAudioService(ytdlpPath, 4), time.Minute, upstream, nil)
 	return navidrome.NewRestProxy(upstream, nil, stream)
 }
 

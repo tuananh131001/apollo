@@ -10,6 +10,7 @@ import (
 	"path"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/go-chi/chi/v5/middleware"
 
@@ -33,12 +34,14 @@ const copyBufferSize = 32 << 10
 
 // NewInterceptStreamService returns an InterceptStreamService that plays
 // Last.fm songs with audio, after Navidrome at upstream has accepted the
-// client's credentials. Navidrome is reached through transport, or
+// client's credentials. A stream ends when the client accepts no audio for
+// writeTimeout. Navidrome is reached through transport, or
 // http.DefaultTransport when transport is nil.
-func NewInterceptStreamService(audio *youtube.AudioService, upstream *url.URL, transport http.RoundTripper) *InterceptStreamService {
+func NewInterceptStreamService(audio *youtube.AudioService, writeTimeout time.Duration, upstream *url.URL, transport http.RoundTripper) *InterceptStreamService {
 	return &InterceptStreamService{
-		audio: audio,
-		auth:  newAuthenticator(upstream, transport),
+		audio:        audio,
+		writeTimeout: writeTimeout,
+		auth:         newAuthenticator(upstream, transport),
 	}
 }
 
@@ -98,7 +101,7 @@ func (s *InterceptStreamService) Intercept(w http.ResponseWriter, r *http.Reques
 	// still answered with a Subsonic error.
 	w.Header().Set("Content-Type", youtube.ContentType)
 	w.WriteHeader(http.StatusOK)
-	if err := copyFlushing(w, audio); err != nil && r.Context().Err() == nil {
+	if err := copyFlushing(w, audio, s.writeTimeout); err != nil && r.Context().Err() == nil {
 		slog.Error("last.fm song stream failed", songLogAttrs(r, id, err)...)
 	}
 	return true
@@ -133,13 +136,19 @@ func songLogAttrs(r *http.Request, id string, err error) []any {
 }
 
 // copyFlushing copies src to w, flushing after every write so the client
-// receives audio as soon as yt-dlp produces it.
-func copyFlushing(w http.ResponseWriter, src io.Reader) error {
+// receives audio as soon as yt-dlp produces it. A write the client does not
+// accept within writeTimeout fails, so a client that stops reading cannot
+// keep yt-dlp running.
+func copyFlushing(w http.ResponseWriter, src io.Reader, writeTimeout time.Duration) error {
 	rc := http.NewResponseController(w)
 	buf := make([]byte, copyBufferSize)
 	for {
 		n, err := src.Read(buf)
 		if n > 0 {
+			// Writers without deadlines, such as test recorders, never block.
+			if derr := rc.SetWriteDeadline(time.Now().Add(writeTimeout)); derr != nil && !errors.Is(derr, http.ErrNotSupported) {
+				return derr
+			}
 			if _, werr := w.Write(buf[:n]); werr != nil {
 				return werr
 			}

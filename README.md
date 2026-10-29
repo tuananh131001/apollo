@@ -47,7 +47,8 @@ song id run [yt-dlp](https://github.com/yt-dlp/yt-dlp) (`APOLLO_YTDLP_PATH`,
 default `yt-dlp` from `PATH`) and pipe its ~128 kbps AAC audio to the client.
 yt-dlp needs [deno](https://deno.com) on `PATH` for YouTube; the Docker image
 ships both. At most `APOLLO_YTDLP_MAX_CONCURRENT` songs (default 4) stream at
-once. A song YouTube Music doesn't have is Subsonic error 70; any other failure
+once, and a stream ends when the client accepts no audio for
+`APOLLO_STREAM_WRITE_TIMEOUT` (default 30s). A song YouTube Music doesn't have is Subsonic error 70; any other failure
 is error 0 and is logged as an error.
 
 The live tests in `test/navidrome/stream_live_test.go` play songs through a
