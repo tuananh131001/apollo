@@ -29,15 +29,6 @@ jobs:
         with:
           node-version: 24
 
-      - name: Load review prompt
-        id: prompt
-        run: |
-          {
-            echo 'text<<PROMPT_EOF'
-            yq -r '.prompt' .github/prompts/pr-review.yml
-            echo 'PROMPT_EOF'
-          } >> "$GITHUB_OUTPUT"
-
       - uses: shaftoe/pi-coding-agent-action@v2.30.1
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
@@ -46,4 +37,35 @@ jobs:
           thinking_level: low
           token: ${{ secrets.OPENCODE_API_KEY }}
           update_comment: true
-          prompt: ${{ steps.prompt.outputs.text }}
+          prompt: |
+            Review this pull request against main.
+            First call get_issue_or_pr_thread to read existing review comments and avoid repeating them.
+            Then call get_pr_diff to inspect the changes.
+
+            Review these areas:
+            - Style violations
+            - Design complexity (from *A Philosophy of Software Design*): shallow modules, information leakage,
+              pass-through methods/variables, temporal decomposition, special-general mixture, unknown unknowns
+            - Clear engineering rule breaks
+
+            Call out for humans:
+            - Database migration related changes
+            - New dependencies introduced
+            - Auth / permissions changes
+            - Backwards-incompatible API changes
+            - Irreversible destructive operations
+
+            Post your findings with create_pull_request_review, using inline comments on the
+            relevant lines and a summary in this format:
+
+                1. [P1] line_code:xx-xx : summary
+                details
+
+                2. [P2] line_code:xx-xx : summary
+                details
+
+                Overall verdict: abc-xyz
+
+                Human Reviewer Callouts (non-blocking)
+
+                <bullet points here>
