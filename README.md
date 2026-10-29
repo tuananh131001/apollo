@@ -45,6 +45,9 @@ Last.fm failures are logged and the client gets an empty result.
 Last.fm songs play from YouTube Music: `stream` and `download` for a `lastfm-`
 song id run [yt-dlp](https://github.com/yt-dlp/yt-dlp) (`APOLLO_YTDLP_PATH`,
 default `yt-dlp` from `PATH`) and pipe its ~128 kbps AAC audio to the client.
+`getSong` for a `lastfm-` id is answered by apollo too, with the same song the
+search returned, for clients such as Supersonic that look a song up before
+playing it.
 yt-dlp needs [deno](https://deno.com) on `PATH` for YouTube; the Docker image
 ships both. At most `APOLLO_YTDLP_MAX_CONCURRENT` songs (default 4) stream at
 once, and a stream ends when the client accepts no audio for
