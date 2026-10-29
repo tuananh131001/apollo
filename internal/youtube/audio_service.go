@@ -19,6 +19,13 @@ import (
 // yt-dlp downloads without needing ffmpeg.
 const audioFormat = "140"
 
+// playerClients are the YouTube player clients yt-dlp tries, in order.
+// yt-dlp's default clients serve audio after a pre-roll ad, so yt-dlp sleeps
+// about 5s "as required by the site" before the first byte; visionos does not,
+// which starts a song in about 3.5s instead of 9s. yt-dlp's defaults stay as
+// the fallback for when visionos has no audio.
+const playerClients = "youtube:player_client=visionos,default"
+
 // ContentType is the media type of the audio Fetch returns.
 const ContentType = "audio/mp4"
 
@@ -70,6 +77,7 @@ func (s *AudioService) Fetch(ctx context.Context, artist, title string) (io.Read
 	cmd := ytdlp.New().
 		SetExecutable(s.ytdlp).
 		Format(audioFormat).
+		ExtractorArgs(playerClients).
 		PlaylistItems("1").
 		NoProgress().
 		Output("-").

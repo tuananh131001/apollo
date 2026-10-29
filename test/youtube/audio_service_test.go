@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/tuananh131001/apollo/internal/youtube"
@@ -22,6 +23,23 @@ func TestFetchReturnsAudio(t *testing.T) {
 
 	if got, _ := io.ReadAll(audio); string(got) != "fake-m4a-audio" {
 		t.Errorf("audio = %q, want fake-m4a-audio", got)
+	}
+}
+
+// yt-dlp's default YouTube clients wait about 5s for a pre-roll ad before the
+// audio starts; the visionos client, tried first, does not.
+func TestFetchPrefersPlayerClientWithoutAdWait(t *testing.T) {
+	s := youtube.NewAudioService(writeYtDlp(t, `printf '%s\n' "$@"`), 1)
+
+	audio, err := s.Fetch(context.Background(), "Lena", "Say")
+	if err != nil {
+		t.Fatalf("Fetch: %v", err)
+	}
+	defer func() { _ = audio.Close() }()
+	args, _ := io.ReadAll(audio)
+
+	if !strings.Contains(string(args), "youtube:player_client=visionos,default") {
+		t.Errorf("yt-dlp args = %q, want visionos first, then the default clients", args)
 	}
 }
 
