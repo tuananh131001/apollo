@@ -11,6 +11,8 @@ import (
 	"os/exec"
 	"strings"
 	"time"
+
+	"github.com/lrstanley/go-ytdlp"
 )
 
 // audioFormat is YouTube's ~128 kbps AAC audio in an MP4 container, which
@@ -63,14 +65,15 @@ func (s *AudioService) Fetch(ctx context.Context, artist, title string) (io.Read
 	release := func() { <-s.slots }
 
 	runCtx, cancel := context.WithCancel(ctx)
-	cmd := exec.CommandContext(runCtx, s.ytdlp,
-		"--format", audioFormat,
-		"--playlist-items", "1",
-		"--no-progress",
-		"--output", "-",
-		searchURL(artist, title),
-	)
-	cmd.WaitDelay = time.Second
+	// go-ytdlp's Run buffers all of stdout, so only its builder is used and
+	// the audio is streamed from the exec.Cmd it builds.
+	cmd := ytdlp.New().
+		SetExecutable(s.ytdlp).
+		Format(audioFormat).
+		PlaylistItems("1").
+		NoProgress().
+		Output("-").
+		BuildCommand(runCtx, searchURL(artist, title))
 	stderr := &tailBuffer{max: maxStderr}
 	cmd.Stderr = stderr
 	stdout, err := cmd.StdoutPipe()
