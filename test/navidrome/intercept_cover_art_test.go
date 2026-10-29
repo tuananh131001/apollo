@@ -13,8 +13,8 @@ import (
 	"github.com/tuananh131001/apollo/test/utils"
 )
 
-// sayOnDeezer is a Deezer search response holding Lena's "Say".
-const sayOnDeezer = `{"data":[{"title":"Say","artist":{"name":"Lena"},"album":{"md5_image":"` + utils.SayCover + `"}}],"total":1}`
+// sayOnDeezer is a Deezer search response holding Lena's "Say", 180s long.
+const sayOnDeezer = `{"data":[{"title":"Say","duration":180,"artist":{"name":"Lena"},"album":{"md5_image":"` + utils.SayCover + `"}}],"total":1}`
 
 // coverImage stands in for a cover's JPEG bytes.
 const coverImage = "\xff\xd8\xff fake jpeg"
@@ -49,7 +49,7 @@ func (c *fakeCDN) Paths() []string {
 	return slices.Clone(c.paths)
 }
 
-func TestInterceptSearchAddsDeezerCover(t *testing.T) {
+func TestInterceptSearchAddsDeezerCoverAndDuration(t *testing.T) {
 	nd := newFakeNavidrome(t)
 	var deezerQuery string
 	proxy := newCoveringProxy(t, nd.URL, func(w http.ResponseWriter, _ *http.Request) {
@@ -67,6 +67,9 @@ func TestInterceptSearchAddsDeezerCover(t *testing.T) {
 	}
 	if songs[0]["coverArt"] != "dz-"+utils.SayCover {
 		t.Errorf("coverArt = %v, want dz-%s", songs[0]["coverArt"], utils.SayCover)
+	}
+	if songs[0]["duration"] != 180.0 {
+		t.Errorf("duration = %v, want 180", songs[0]["duration"])
 	}
 	if want := navidrome.LastFMSongID("Lena", "Say"); songs[0]["id"] != want {
 		t.Errorf("id = %v, want %s", songs[0]["id"], want)
