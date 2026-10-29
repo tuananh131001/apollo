@@ -35,3 +35,17 @@ func ParseLastFMSongID(id string) (artist, title string, ok bool) {
 	}
 	return v[0], v[1], true
 }
+
+// lastFMSong returns the Subsonic song of the Last.fm track artist - title.
+// Last.fm tracks are not in Navidrome, so they have no file details; the
+// fields are still sent because clients such as Feishin fail on songs without
+// them.
+func lastFMSong(artist, title string) song {
+	return song{
+		ID:         LastFMSongID(artist, title),
+		Title:      title,
+		Artist:     artist,
+		Type:       "music",
+		DiscNumber: 1,
+	}
+}

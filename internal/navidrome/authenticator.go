@@ -72,3 +72,24 @@ func (a authenticator) authenticate(r *http.Request) (subsonicResponse, error) {
 	}
 	return body.Response, nil
 }
+
+// authorize authenticates r, whose Subsonic parameters are q, like Navidrome
+// would. It returns a clone of r carrying q in its query string, so parameters
+// sent in a form body also pick the response format, and Navidrome's "ok"
+// envelope to answer in. When the client is not accepted it writes the failure
+// and returns false.
+func (a authenticator) authorize(w http.ResponseWriter, r *http.Request, q url.Values) (*http.Request, subsonicResponse, bool) {
+	r = r.Clone(r.Context())
+	r.URL.RawQuery = q.Encode()
+
+	nd, err := a.authenticate(r)
+	if err != nil {
+		writeUnavailable(w, r, err)
+		return r, nd, false
+	}
+	if nd.Status != "ok" {
+		writeResponse(w, r, http.StatusOK, nd)
+		return r, nd, false
+	}
+	return r, nd, true
+}

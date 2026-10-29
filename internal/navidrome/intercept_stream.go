@@ -57,18 +57,8 @@ func (s *InterceptStreamService) Intercept(w http.ResponseWriter, r *http.Reques
 	if !strings.HasPrefix(id, lastFMSongIDPrefix) {
 		return false
 	}
-	// Answer as if every parameter came in the query string, so those sent in
-	// a form body also pick the response format and authenticate the client.
-	r = r.Clone(r.Context())
-	r.URL.RawQuery = q.Encode()
-
-	nd, err := s.auth.authenticate(r)
-	if err != nil {
-		writeUnavailable(w, r, err)
-		return true
-	}
-	if nd.Status != "ok" {
-		writeResponse(w, r, http.StatusOK, nd)
+	r, nd, ok := s.auth.authorize(w, r, q)
+	if !ok {
 		return true
 	}
 
