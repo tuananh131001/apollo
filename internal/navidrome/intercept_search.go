@@ -95,25 +95,25 @@ func (s *InterceptSearchService) Intercept(w http.ResponseWriter, r *http.Reques
 }
 
 // songs returns tracks as Subsonic songs, in the same order, with the album
-// covers and lengths Deezer finds for them within coverLookupTimeout.
+// covers Deezer finds for them within coverLookupTimeout.
 func (s *InterceptSearchService) songs(r *http.Request, tracks []lastfm.Track) []song {
 	ctx, cancel := context.WithTimeout(r.Context(), coverLookupTimeout)
 	defer cancel()
-	found := make([]deezer.Track, len(tracks))
+	covers := make([]string, len(tracks))
 	sem := make(chan struct{}, maxCoverLookups)
 	var wg sync.WaitGroup
 	for i, t := range tracks {
 		wg.Go(func() {
 			sem <- struct{}{}
 			defer func() { <-sem }()
-			found[i] = s.covers.FindTrack(ctx, t.Artist, t.Name)
+			covers[i] = s.covers.FindCover(ctx, t.Artist, t.Name)
 		})
 	}
 	wg.Wait()
 
 	songs := make([]song, len(tracks))
 	for i, t := range tracks {
-		songs[i] = lastFMSong(t.Artist, t.Name, found[i])
+		songs[i] = lastFMSong(t.Artist, t.Name, covers[i])
 	}
 	return songs
 }
