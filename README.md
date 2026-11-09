@@ -51,20 +51,14 @@ title. Matched songs get a `dz-` `coverArt` id, and apollo answers
 are cached in memory (24h, or 1h when Deezer has no cover; failures are not
 cached), so repeated searches stay within Deezer's rate limit. A song Deezer
 doesn't match, or whose lookup fails or misses the 2s, has no `coverArt` and
-the client shows its own placeholder. When Deezer has the song itself (same
-artist and title), the result also gets its `duration`; one matched only by
-artist gets the cover alone.
+the client shows its own placeholder.
 
 Last.fm songs play from YouTube Music: `stream` and `download` for a `lastfm-`
 song id run [yt-dlp](https://github.com/yt-dlp/yt-dlp) (`APOLLO_YTDLP_PATH`,
 default `yt-dlp` from `PATH`) and pipe its ~128 kbps AAC audio to the client.
 `getSong` for a `lastfm-` id is answered by apollo too, with the same song the
 search returned, for clients such as Supersonic that look a song up before
-playing it. Since the song is about to play, `getSong` also looks it up on
-YouTube Music with yt-dlp (no download; cached 1h) and answers with the
-`duration` of that audio, falling back to Deezer's when the lookup fails. A
-song YouTube Music doesn't have is answered without a `duration` and logged as
-a warning.
+playing it.
 yt-dlp asks YouTube's `visionos` player client first, falling back to yt-dlp's
 defaults: the default clients serve audio only after a pre-roll ad, which makes
 yt-dlp wait about 5s, so a song starts in about 4s instead of 9s. Clients such

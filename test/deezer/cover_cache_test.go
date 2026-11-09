@@ -17,7 +17,7 @@ import (
 // The cache tests run in a synctest bubble so its clock can jump hours ahead,
 // with Deezer answered in memory: a real server would leave the bubble.
 
-func TestFindTrackCacheExpires(t *testing.T) {
+func TestFindCoverCacheExpires(t *testing.T) {
 	tests := []struct {
 		name, body string
 		// fresh is how long the answer is still served from the cache, and
@@ -34,14 +34,14 @@ func TestFindTrackCacheExpires(t *testing.T) {
 				svc := deezer.service()
 				start := time.Now()
 
-				svc.FindTrack(t.Context(), "Lena", "Say")
+				svc.FindCover(t.Context(), "Lena", "Say")
 				time.Sleep(tt.fresh)
-				svc.FindTrack(t.Context(), "Lena", "Say")
+				svc.FindCover(t.Context(), "Lena", "Say")
 				if got := deezer.Calls(); got != 1 {
 					t.Errorf("deezer calls after %v = %d, want 1 (cached)", tt.fresh, got)
 				}
 				time.Sleep(time.Until(start.Add(tt.stale)))
-				svc.FindTrack(t.Context(), "Lena", "Say")
+				svc.FindCover(t.Context(), "Lena", "Say")
 				if got := deezer.Calls(); got != 2 {
 					t.Errorf("deezer calls after %v = %d, want 2 (expired)", tt.stale, got)
 				}
@@ -50,7 +50,7 @@ func TestFindTrackCacheExpires(t *testing.T) {
 	}
 }
 
-func TestFindTrackCacheEvictsLeastRecentlyUsed(t *testing.T) {
+func TestFindCoverCacheEvictsLeastRecentlyUsed(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		deezer := newMemoryDeezer(func(r *http.Request) string {
 			// Every song is by Lena, so every lookup finds a cover.
@@ -63,17 +63,17 @@ func TestFindTrackCacheEvictsLeastRecentlyUsed(t *testing.T) {
 		// is the least recently used.
 		const size = 4096
 		for i := range size {
-			svc.FindTrack(t.Context(), "Lena", "song "+strconv.Itoa(i))
+			svc.FindCover(t.Context(), "Lena", "song "+strconv.Itoa(i))
 		}
-		svc.FindTrack(t.Context(), "Lena", "song 0")
-		svc.FindTrack(t.Context(), "Lena", "one song too many")
+		svc.FindCover(t.Context(), "Lena", "song 0")
+		svc.FindCover(t.Context(), "Lena", "one song too many")
 		before := deezer.Calls()
 
-		svc.FindTrack(t.Context(), "Lena", "song 0")
+		svc.FindCover(t.Context(), "Lena", "song 0")
 		if got := deezer.Calls() - before; got != 0 {
 			t.Errorf("recently used song: deezer calls = %d, want 0 (cached)", got)
 		}
-		svc.FindTrack(t.Context(), "Lena", "song 1")
+		svc.FindCover(t.Context(), "Lena", "song 1")
 		if got := deezer.Calls() - before; got != 1 {
 			t.Errorf("least recently used song: deezer calls = %d, want 1 (evicted)", got)
 		}
@@ -82,7 +82,7 @@ func TestFindTrackCacheEvictsLeastRecentlyUsed(t *testing.T) {
 
 // Two searches looking the same song up at once both ask Deezer; the cache
 // keeps one answer.
-func TestFindTrackConcurrentLookups(t *testing.T) {
+func TestFindCoverConcurrentLookups(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		arrived := make(chan struct{})
 		release := make(chan struct{})
@@ -95,14 +95,14 @@ func TestFindTrackConcurrentLookups(t *testing.T) {
 
 		var wg sync.WaitGroup
 		for range 2 {
-			wg.Go(func() { svc.FindTrack(t.Context(), "Lena", "Say") })
+			wg.Go(func() { svc.FindCover(t.Context(), "Lena", "Say") })
 		}
 		<-arrived
 		<-arrived
 		close(release)
 		wg.Wait()
 
-		if got := svc.FindTrack(t.Context(), "Lena", "Say").Cover; got != utils.SayCover {
+		if got := svc.FindCover(t.Context(), "Lena", "Say"); got != utils.SayCover {
 			t.Errorf("cover = %q, want %q", got, utils.SayCover)
 		}
 		if got := deezer.Calls(); got != 2 {

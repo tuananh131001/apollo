@@ -48,7 +48,6 @@ type InterceptStreamService struct {
 // LastFMSongID ids, so clients can look them up before playing them.
 type InterceptSongService struct {
 	covers *deezer.CoverArtService
-	audio  *youtube.AudioService
 	auth   authenticator
 }
 
@@ -106,6 +105,4 @@ type song struct {
 	Created     string `json:"created" xml:"created,attr"`
 	Type        string `json:"type" xml:"type,attr"`
 	CoverArt    string `json:"coverArt,omitempty" xml:"coverArt,attr,omitempty"`
-	// Duration is in seconds.
-	Duration int `json:"duration,omitempty" xml:"duration,attr,omitempty"`
 }

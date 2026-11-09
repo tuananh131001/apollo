@@ -5,11 +5,9 @@ import (
 	"net/http"
 	"net/url"
 	"slices"
-	"strings"
 	"testing"
 
 	"github.com/tuananh131001/apollo/internal/navidrome"
-	"github.com/tuananh131001/apollo/internal/youtube"
 	"github.com/tuananh131001/apollo/test/utils"
 )
 
@@ -73,67 +71,6 @@ func TestInterceptSongMatchesSearchResult(t *testing.T) {
 	}
 	if len(got) != len(found[0]) {
 		t.Errorf("song = %v, want the search song %v", got, found[0])
-	}
-}
-
-// ytDlpSay looks Lena's "Say" up as yt-dlp -j does: 177s on YouTube Music.
-const ytDlpSay = `echo '{"_type":"video","id":"tUg5Wsv7kNI","duration":177.0,"format_id":"140"}'`
-
-// The player always shows a song's length, even one Deezer does not know.
-func TestInterceptSongHasYouTubeDuration(t *testing.T) {
-	nd := newFakeNavidrome(t)
-	proxy := newTimedSongProxy(t, nd.URL, noCovers, ytDlpSay)
-
-	rec := utils.Serve(proxy, "/rest/getSong.view?"+streamQuery(ndUser, ndPassword, navidrome.LastFMSongID("Lena", "Say")))
-
-	if got := utils.DecodeJSON[songEnvelope](t, rec).Response.Song["duration"]; got != 177.0 {
-		t.Errorf("duration = %v, want 177", got)
-	}
-}
-
-// The length shown is that of the audio that will play.
-func TestInterceptSongPrefersYouTubeDurationToDeezer(t *testing.T) {
-	nd := newFakeNavidrome(t)
-	proxy := newTimedSongProxy(t, nd.URL, func(w http.ResponseWriter, _ *http.Request) {
-		_, _ = w.Write([]byte(sayOnDeezer))
-	}, ytDlpSay)
-
-	rec := utils.Serve(proxy, "/rest/getSong.view?"+streamQuery(ndUser, ndPassword, navidrome.LastFMSongID("Lena", "Say")))
-
-	song := utils.DecodeJSON[songEnvelope](t, rec).Response.Song
-	if song["duration"] != 177.0 || song["coverArt"] != "dz-"+utils.SayCover {
-		t.Errorf("song = %v, want YouTube's 177s with Deezer's cover", song)
-	}
-}
-
-func TestInterceptSongFallsBackToDeezerDuration(t *testing.T) {
-	nd := newFakeNavidrome(t)
-	logs := captureLogs(t)
-	proxy := newTimedSongProxy(t, nd.URL, func(w http.ResponseWriter, _ *http.Request) {
-		_, _ = w.Write([]byte(sayOnDeezer))
-	}, ytDlpFails)
-
-	rec := utils.Serve(proxy, "/rest/getSong.view?"+streamQuery(ndUser, ndPassword, navidrome.LastFMSongID("Lena", "Say")))
-
-	resp := utils.DecodeJSON[songEnvelope](t, rec).Response
-	if resp.Status != "ok" || resp.Song["duration"] != 180.0 {
-		t.Errorf("response = %+v, want ok with Deezer's 180s", resp)
-	}
-	if out := logs.String(); !strings.Contains(out, "level=WARN") || !strings.Contains(out, "403") {
-		t.Errorf("logs = %q, want a warning with yt-dlp's stderr", out)
-	}
-}
-
-// A song YouTube Music does not have still answers, without a length.
-func TestInterceptSongWithoutYouTubeMatch(t *testing.T) {
-	nd := newFakeNavidrome(t)
-	proxy := newTimedSongProxy(t, nd.URL, noCovers, ytDlpNoMatch)
-
-	rec := utils.Serve(proxy, "/rest/getSong.view?"+streamQuery(ndUser, ndPassword, navidrome.LastFMSongID("Lena", "Say")))
-
-	resp := utils.DecodeJSON[songEnvelope](t, rec).Response
-	if _, ok := resp.Song["duration"]; resp.Status != "ok" || ok {
-		t.Errorf("response = %+v, want ok without a duration", resp)
 	}
 }
 
@@ -247,17 +184,9 @@ func TestInterceptSongForwardsOtherRequests(t *testing.T) {
 
 // newSongProxy returns a RestProxy in front of the Navidrome at upstream that
 // answers getSong for Last.fm songs, with covers from a Deezer test server
-// running deezerHandler, and a yt-dlp that finds no song.
+// running deezerHandler.
 func newSongProxy(t *testing.T, upstream *url.URL, deezerHandler http.HandlerFunc) *navidrome.RestProxy {
 	t.Helper()
-	return newTimedSongProxy(t, upstream, deezerHandler, ytDlpNoMatch)
-}
-
-// newTimedSongProxy is newSongProxy with lengths from a stand-in yt-dlp
-// running the shell script ytdlpBody.
-func newTimedSongProxy(t *testing.T, upstream *url.URL, deezerHandler http.HandlerFunc, ytdlpBody string) *navidrome.RestProxy {
-	t.Helper()
-	audio := youtube.NewAudioService(newFakeYtDlp(t, ytdlpBody).Path, 4)
-	song := navidrome.NewInterceptSongService(utils.NewDeezer(t, deezerHandler), audio, upstream, nil)
+	song := navidrome.NewInterceptSongService(utils.NewDeezer(t, deezerHandler), upstream, nil)
 	return navidrome.NewRestProxy(upstream, nil, song)
 }

@@ -13,8 +13,6 @@ import (
 	"time"
 
 	"github.com/lrstanley/go-ytdlp"
-
-	"github.com/tuananh131001/apollo/internal/cache"
 )
 
 // audioFormat is YouTube's ~128 kbps AAC audio in an MP4 container, which
@@ -34,15 +32,6 @@ const ContentType = "audio/mp4"
 // firstByteTimeout bounds how long yt-dlp may take to start sending audio.
 const firstByteTimeout = 30 * time.Second
 
-// lookupTimeout bounds how long yt-dlp may take to look a song up.
-const lookupTimeout = 30 * time.Second
-
-// How long Lookup answers are cached, and how many.
-const (
-	songCacheTTL  = time.Hour
-	songCacheSize = 1024
-)
-
 // headSize is how much audio Fetch reads before returning.
 const headSize = 32 << 10
 
@@ -60,11 +49,7 @@ var (
 // ytdlpPath, which is looked up in PATH when it has no slash, with at most
 // maxConcurrent downloads running at once.
 func NewAudioService(ytdlpPath string, maxConcurrent int) *AudioService {
-	return &AudioService{
-		ytdlp: ytdlpPath,
-		slots: make(chan struct{}, max(maxConcurrent, 1)),
-		songs: cache.NewLRU[Song](songCacheSize),
-	}
+	return &AudioService{ytdlp: ytdlpPath, slots: make(chan struct{}, max(maxConcurrent, 1))}
 }
 
 // Check reports an error when the yt-dlp executable cannot be found.
@@ -133,47 +118,6 @@ func (s *AudioService) Fetch(ctx context.Context, artist, title string) (io.Read
 	}
 	a.r = io.MultiReader(bytes.NewReader(head[:n]), stdout)
 	return a, nil
-}
-
-// Lookup searches YouTube Music for artist and title, as Fetch does, without
-// downloading, and returns what yt-dlp knows of the first song. Answers are
-// cached; failures are not. It returns ErrNotFound when there is no such song
-// and ErrBusy when no download slot is free.
-func (s *AudioService) Lookup(ctx context.Context, artist, title string) (Song, error) {
-	key := artist + "\x00" + title
-	if song, ok := s.songs.Get(key); ok {
-		return song, nil
-	}
-	select {
-	case s.slots <- struct{}{}:
-	default:
-		return Song{}, ErrBusy
-	}
-	defer func() { <-s.slots }()
-
-	ctx, cancel := context.WithTimeout(ctx, lookupTimeout)
-	defer cancel()
-	info, _, err := ytdlp.New().
-		SetExecutable(s.ytdlp).
-		Format(audioFormat).
-		ExtractorArgs(playerClients).
-		PlaylistItems("1").
-		ExtractInfo(ctx, searchURL(artist, title))
-	if err != nil {
-		if ctx.Err() != nil {
-			return Song{}, ctx.Err()
-		}
-		return Song{}, fmt.Errorf("yt-dlp: %w", err)
-	}
-	if len(info) == 0 {
-		return Song{}, ErrNotFound
-	}
-	var song Song
-	if d := info[0].Duration; d != nil {
-		song.Duration = time.Duration(*d * float64(time.Second)).Round(time.Second)
-	}
-	s.songs.Put(key, song, songCacheTTL)
-	return song, nil
 }
 
 // searchURL is the YouTube Music search for artist and title, limited to songs.

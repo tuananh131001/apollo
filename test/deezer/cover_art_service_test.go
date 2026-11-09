@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"net/url"
 	"os"
-	"strconv"
 	"testing"
 	"testing/synctest"
 	"time"
@@ -16,7 +15,7 @@ import (
 	"github.com/tuananh131001/apollo/test/utils"
 )
 
-func TestFindTrackSendsQuery(t *testing.T) {
+func TestFindCoverSendsQuery(t *testing.T) {
 	var got url.Values
 	var path string
 	svc := utils.NewDeezer(t, func(w http.ResponseWriter, r *http.Request) {
@@ -24,7 +23,7 @@ func TestFindTrackSendsQuery(t *testing.T) {
 		_, _ = w.Write([]byte(`{"data":[]}`))
 	})
 
-	svc.FindTrack(t.Context(), "Lena", "Say")
+	svc.FindCover(t.Context(), "Lena", "Say")
 
 	want := url.Values{"q": {"Lena Say"}, "limit": {"10"}}
 	if path != "/api/search" || got.Encode() != want.Encode() {
@@ -32,7 +31,7 @@ func TestFindTrackSendsQuery(t *testing.T) {
 	}
 }
 
-func TestFindTrackDecodesRealResponse(t *testing.T) {
+func TestFindCoverDecodesRealResponse(t *testing.T) {
 	// The first three matches of a real search for "Son Tung M-TP Lạc Trôi".
 	body, err := os.ReadFile("testdata/search_lac_troi.json")
 	if err != nil {
@@ -43,45 +42,14 @@ func TestFindTrackDecodesRealResponse(t *testing.T) {
 	})
 
 	// Deezer spells the artist without diacritics.
-	got := svc.FindTrack(t.Context(), "Sơn Tùng M-TP", "Lạc Trôi")
+	got := svc.FindCover(t.Context(), "Sơn Tùng M-TP", "Lạc Trôi")
 
-	want := deezer.Track{Cover: "f9caaa021815b0d96117d4fad11379d6", Duration: 232 * time.Second}
-	if got != want {
-		t.Errorf("track = %+v, want %+v", got, want)
+	if want := "f9caaa021815b0d96117d4fad11379d6"; got != want {
+		t.Errorf("cover = %q, want %q", got, want)
 	}
 }
 
-func TestFindTrackDuration(t *testing.T) {
-	tests := []struct {
-		name, body string
-		want       deezer.Track
-	}{
-		{
-			name: "same title",
-			body: `{"data":[` + timedTrack("SAY", "Lena", utils.SayCover, 177) + `]}`,
-			want: deezer.Track{Cover: utils.SayCover, Duration: 177 * time.Second},
-		},
-		{
-			// Another song's cover stands in, but its length would be wrong.
-			name: "other title",
-			body: `{"data":[` + timedTrack("Satellite", "Lena", utils.SayCover, 174) + `]}`,
-			want: deezer.Track{Cover: utils.SayCover},
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			svc := utils.NewDeezer(t, func(w http.ResponseWriter, _ *http.Request) {
-				_, _ = w.Write([]byte(tt.body))
-			})
-
-			if got := svc.FindTrack(t.Context(), "Lena", "Say"); got != tt.want {
-				t.Errorf("track = %+v, want %+v", got, tt.want)
-			}
-		})
-	}
-}
-
-func TestFindTrackMatching(t *testing.T) {
+func TestFindCoverMatching(t *testing.T) {
 	tests := []struct {
 		name, artist, title, body, want string
 	}{
@@ -140,25 +108,25 @@ func TestFindTrackMatching(t *testing.T) {
 				_, _ = w.Write([]byte(tt.body))
 			})
 
-			if got := svc.FindTrack(t.Context(), tt.artist, tt.title).Cover; got != tt.want {
-				t.Errorf("FindTrack(%q, %q) = %q, want %q", tt.artist, tt.title, got, tt.want)
+			if got := svc.FindCover(t.Context(), tt.artist, tt.title); got != tt.want {
+				t.Errorf("FindCover(%q, %q) = %q, want %q", tt.artist, tt.title, got, tt.want)
 			}
 		})
 	}
 }
 
-func TestFindTrackHTTPFailure(t *testing.T) {
+func TestFindCoverHTTPFailure(t *testing.T) {
 	svc := utils.NewDeezer(t, func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 		_, _ = w.Write([]byte(`{"data":[` + track("Say", "Lena", utils.SayCover) + `]}`))
 	})
 
-	if got := svc.FindTrack(t.Context(), "Lena", "Say").Cover; got != "" {
+	if got := svc.FindCover(t.Context(), "Lena", "Say"); got != "" {
 		t.Errorf("cover = %q, want none", got)
 	}
 }
 
-func TestFindTrackCachesAnswers(t *testing.T) {
+func TestFindCoverCachesAnswers(t *testing.T) {
 	for _, tt := range []struct{ name, body, want string }{
 		{name: "cover", body: `{"data":[` + track("Say", "Lena", utils.SayCover) + `]}`, want: utils.SayCover},
 		{name: "no cover", body: `{"data":[]}`, want: ""},
@@ -170,9 +138,9 @@ func TestFindTrackCachesAnswers(t *testing.T) {
 				_, _ = w.Write([]byte(tt.body))
 			})
 
-			first := svc.FindTrack(t.Context(), "Lena", "Say").Cover
+			first := svc.FindCover(t.Context(), "Lena", "Say")
 			// The same song, spelled differently.
-			second := svc.FindTrack(t.Context(), "LENA", "say").Cover
+			second := svc.FindCover(t.Context(), "LENA", "say")
 
 			if first != tt.want || second != tt.want {
 				t.Errorf("covers = %q, %q; want %q twice", first, second, tt.want)
@@ -184,7 +152,7 @@ func TestFindTrackCachesAnswers(t *testing.T) {
 	}
 }
 
-func TestFindTrackDoesNotCacheFailures(t *testing.T) {
+func TestFindCoverDoesNotCacheFailures(t *testing.T) {
 	calls := 0
 	svc := utils.NewDeezer(t, func(w http.ResponseWriter, _ *http.Request) {
 		calls++
@@ -195,15 +163,15 @@ func TestFindTrackDoesNotCacheFailures(t *testing.T) {
 		_, _ = w.Write([]byte(`{"data":[` + track("Say", "Lena", utils.SayCover) + `]}`))
 	})
 
-	first := svc.FindTrack(t.Context(), "Lena", "Say").Cover
-	second := svc.FindTrack(t.Context(), "Lena", "Say").Cover
+	first := svc.FindCover(t.Context(), "Lena", "Say")
+	second := svc.FindCover(t.Context(), "Lena", "Say")
 
 	if first != "" || second != utils.SayCover {
 		t.Errorf("covers = %q, %q; want none, then %q", first, second, utils.SayCover)
 	}
 }
 
-func TestFindTrackCancelled(t *testing.T) {
+func TestFindCoverCancelled(t *testing.T) {
 	calls := 0
 	svc := utils.NewDeezer(t, func(w http.ResponseWriter, _ *http.Request) {
 		calls++
@@ -212,9 +180,9 @@ func TestFindTrackCancelled(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
 
-	cancelled := svc.FindTrack(ctx, "Lena", "Say").Cover
+	cancelled := svc.FindCover(ctx, "Lena", "Say")
 	// A cancelled lookup is not remembered as no cover.
-	later := svc.FindTrack(t.Context(), "Lena", "Say").Cover
+	later := svc.FindCover(t.Context(), "Lena", "Say")
 
 	if cancelled != "" || later != utils.SayCover {
 		t.Errorf("covers = %q, %q; want none, then %q", cancelled, later, utils.SayCover)
@@ -369,9 +337,4 @@ func TestValidCoverID(t *testing.T) {
 // track is a Deezer search match.
 func track(title, artist, cover string) string {
 	return `{"title":"` + title + `","artist":{"name":"` + artist + `"},"album":{"md5_image":"` + cover + `"}}`
-}
-
-// timedTrack is a Deezer search match that is seconds long.
-func timedTrack(title, artist, cover string, seconds int) string {
-	return `{"title":"` + title + `","duration":` + strconv.Itoa(seconds) + `,"artist":{"name":"` + artist + `"},"album":{"md5_image":"` + cover + `"}}`
 }
