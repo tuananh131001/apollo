@@ -4,6 +4,8 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"strings"
+
+	"github.com/tuananh131001/apollo/internal/deezer"
 )
 
 // lastFMSongIDPrefix marks the ids of Last.fm songs, which apollo plays itself
@@ -41,20 +43,21 @@ func ParseLastFMSongID(id string) (artist, title string, ok bool) {
 }
 
 // lastFMSong returns the Subsonic song of the Last.fm track artist - title,
-// with the Deezer album cover cover unless it is empty. Last.fm tracks are not
+// with the album cover and length Deezer found in dz, if any. Last.fm tracks are not
 // in Navidrome, so they have no file details; the fields are still sent
 // because clients such as Feishin fail on songs without them. The id leaves
 // the cover out, so a song keeps its id whether or not its cover was found.
-func lastFMSong(artist, title, cover string) song {
+func lastFMSong(artist, title string, dz deezer.Track) song {
 	s := song{
 		ID:         LastFMSongID(artist, title),
 		Title:      title,
 		Artist:     artist,
 		Type:       "music",
 		DiscNumber: 1,
+		Duration:   int(dz.Duration.Seconds()),
 	}
-	if cover != "" {
-		s.CoverArt = coverArtIDPrefix + cover
+	if dz.Cover != "" {
+		s.CoverArt = coverArtIDPrefix + dz.Cover
 	}
 	return s
 }

@@ -55,7 +55,7 @@ func run() error {
 		slog.Warn("yt-dlp not found; Last.fm songs will not play", "path", cfg.YtDlpPath, "err", err)
 	}
 	stream := navidrome.NewInterceptStreamService(audio, cfg.StreamWriteTimeout, cfg.NavidromeURL, nil)
-	song := navidrome.NewInterceptSongService(covers, cfg.NavidromeURL, nil)
+	song := navidrome.NewInterceptSongService(covers, audio, cfg.NavidromeURL, nil)
 	coverArt := navidrome.NewInterceptCoverArtService(covers, cfg.NavidromeURL, nil)
 	restProxy := navidrome.NewRestProxy(cfg.NavidromeURL, nil, search, stream, song, coverArt)
 	srv := &http.Server{Addr: cfg.Addr, Handler: server.NewHandler(restProxy)}

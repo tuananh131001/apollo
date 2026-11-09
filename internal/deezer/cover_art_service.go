@@ -18,6 +18,8 @@ import (
 	"golang.org/x/text/runes"
 	"golang.org/x/text/transform"
 	"golang.org/x/text/unicode/norm"
+
+	"github.com/tuananh131001/apollo/internal/cache"
 )
 
 // DefaultAPIURL is the Deezer API root.
@@ -33,7 +35,7 @@ const requestTimeout = 5 * time.Second
 // searchLimit is how many Deezer matches are checked for the right artist.
 const searchLimit = 10
 
-// How long FindCover answers are cached, and how many. A song with no cover
+// How long FindTrack answers are cached, and how many. A song with no cover
 // is checked again sooner, in case Deezer adds it.
 const (
 	coverCacheTTL   = 24 * time.Hour
@@ -63,7 +65,7 @@ func NewCoverArtService(apiURL, imageURL *url.URL, transport http.RoundTripper) 
 		apiURL:   apiURL,
 		imageURL: imageURL,
 		client:   &http.Client{Transport: transport},
-		cache:    newCoverCache(coverCacheSize),
+		cache:    cache.NewLRU[Track](coverCacheSize),
 	}
 }
 
@@ -81,15 +83,16 @@ func ValidCoverID(id string) bool {
 	return true
 }
 
-// FindCover returns the id of the album cover of artist's song title, or ""
-// when Deezer has no song by that artist. A song by the same artist with the
-// same title is preferred over the first song by the artist. Answers are
+// FindTrack returns the album cover of artist's song title, with the song's
+// length when Deezer has the song itself, or no cover when Deezer has no song
+// by that artist. A song by the same artist with the same title is preferred
+// over the first song by the artist, whose cover stands in. Answers are
 // cached; failures are not, and are logged and reported as no cover.
-func (s *CoverArtService) FindCover(ctx context.Context, artist, title string) string {
+func (s *CoverArtService) FindTrack(ctx context.Context, artist, title string) Track {
 	wantArtist, wantTitle := fold(artist), fold(title)
 	key := wantArtist + "\x00" + wantTitle
-	if cover, ok := s.cache.get(key); ok {
-		return cover
+	if track, ok := s.cache.Get(key); ok {
+		return track
 	}
 	tracks, err := s.search(ctx, artist+" "+title)
 	if err != nil {
@@ -100,33 +103,35 @@ func (s *CoverArtService) FindCover(ctx context.Context, artist, title string) s
 		} else {
 			slog.Error("deezer search failed", "artist", artist, "title", title, "err", err)
 		}
-		return ""
+		return Track{}
 	}
-	cover := matchCover(tracks, wantArtist, wantTitle)
+	track := matchTrack(tracks, wantArtist, wantTitle)
 	ttl := coverCacheTTL
-	if cover == "" {
+	if track.Cover == "" {
 		ttl = noCoverCacheTTL
 	}
-	s.cache.put(key, cover, ttl)
-	return cover
+	s.cache.Put(key, track, ttl)
+	return track
 }
 
-// matchCover returns the cover of the first of tracks by artist, preferring
-// one titled title, or "" when none is by artist. artist and title are folded.
-func matchCover(tracks []searchTrack, artist, title string) string {
-	cover := ""
+// matchTrack returns the first of tracks by artist titled title, or else the
+// cover alone of the first by artist, since another song's length would be
+// wrong. It returns no cover when none is by artist. artist and title are
+// folded.
+func matchTrack(tracks []searchTrack, artist, title string) Track {
+	var match Track
 	for _, t := range tracks {
 		if fold(t.Artist.Name) != artist || !ValidCoverID(t.Album.MD5Image) {
 			continue
 		}
 		if fold(t.Title) == title {
-			return t.Album.MD5Image
+			return Track{Cover: t.Album.MD5Image, Duration: time.Duration(t.Duration) * time.Second}
 		}
-		if cover == "" {
-			cover = t.Album.MD5Image
+		if match.Cover == "" {
+			match.Cover = t.Album.MD5Image
 		}
 	}
-	return cover
+	return match
 }
 
 func (s *CoverArtService) search(ctx context.Context, query string) ([]searchTrack, error) {
